@@ -41,15 +41,6 @@ jobs:
             type=raw,value=dev,enable=${{ github.event_name != 'release' }}
             type=sha,enable=${{ github.event_name != 'release' }}
 
-      - name: Set image visibility to public
-        if: github.event_name == 'release'
-        run: |
-          curl -X PATCH \
-            -H "Accept: application/vnd.github.v3+json" \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            https://api.github.com/orgs/RestDB/packages/container/ndb-mcp-server/visibility \
-            -d '{"visibility":"public"}'
-
       - name: Build and push Docker image
         uses: docker/build-push-action@f2a1d5e99d037542a71f64918e516c093c6f3fc4
         with:
@@ -57,3 +48,4 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          visibility: ${{ github.event_name == 'release' && 'public' || 'private' }}
