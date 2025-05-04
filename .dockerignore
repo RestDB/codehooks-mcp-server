@@ -45,3 +45,5 @@ tests/
 *.pem
 .npm
 .eslintcache 
+run.sh
+test.sh

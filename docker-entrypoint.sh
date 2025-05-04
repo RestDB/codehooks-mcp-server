@@ -2,8 +2,8 @@
 set -e
 
 # Check if required environment variables are set
-if [ -z "$CODEHOOKS_PROJECT_ID" ]; then
-    echo "Error: CODEHOOKS_PROJECT_ID environment variable is required"
+if [ -z "$CODEHOOKS_PROJECT_NAME" ]; then
+    echo "Error: CODEHOOKS_PROJECT_NAME environment variable is required"
     exit 1
 fi
 

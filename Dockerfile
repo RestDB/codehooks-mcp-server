@@ -12,18 +12,9 @@ RUN npm install -g codehooks
 # Create app directory
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
-
-# Install dependencies
-RUN npm ci
-
-# Copy source code and config files
-COPY tsconfig.json ./
+# Copy package files and source code
+COPY package*.json tsconfig.json ./
 COPY src ./src
-
-# Build the project
-RUN npm run build
 
 # Create a non-root user
 RUN useradd -m mcp && chown -R mcp:mcp /app
@@ -33,6 +24,9 @@ USER mcp
 
 # Create directory for temporary files
 RUN mkdir -p /tmp/codehooks
+
+# Install dependencies and build
+RUN npm ci && npm run build
 
 # Set environment variables
 ENV NODE_ENV=production

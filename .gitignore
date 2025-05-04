@@ -2,3 +2,5 @@ node_modules/
 build/
 .env
 *.log 
+run.sh
+test.sh
