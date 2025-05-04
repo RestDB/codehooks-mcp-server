@@ -47,7 +47,7 @@ jobs:
           curl -X PATCH \
             -H "Accept: application/vnd.github.v3+json" \
             -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            https://api.github.com/user/packages/container/${{ github.event.repository.name }}/visibility \
+            https://api.github.com/orgs/RestDB/packages/container/ndb-mcp-server/visibility \
             -d '{"visibility":"public"}'
 
       - name: Build and push Docker image
