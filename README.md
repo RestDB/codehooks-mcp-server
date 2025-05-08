@@ -59,27 +59,15 @@ Add the following to your `claude-settings.json`:
 
 ### Using with Cursor
 
-Add the following to your `~/.cursor/config.json`:
+Add the following to your `~/.cursor/mcp.json`:
 
 ```json
 {
-  "tools": {
+  "mcpServers": {
     "codehooks": {
       "type": "mcp",
       "transport": "stdio",
-      "command": [
-        "docker",
-        "run",
-        "--rm",
-        "-i",
-        "-e",
-        "CODEHOOKS_PROJECT_NAME=your_project_name",
-        "-e",
-        "CODEHOOKS_ADMIN_TOKEN=your_admin_token",
-        "-e",
-        "CODEHOOKS_SPACE=dev",
-        "ghcr.io/owner/codehooks-mcp:latest"
-      ]
+      "command": "docker run --rm -i -e CODEHOOKS_PROJECT_NAME=mybackend-fatb -e CODEHOOKS_ADMIN_TOKEN=72d4fd18a79be99c5cbfbf7dbe454093-c2516bb39524 -e CODEHOOKS_SPACE=dev ghcr.io/restdb/codehooks-mcp:latest"
     }
   }
 }
