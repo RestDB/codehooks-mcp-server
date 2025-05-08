@@ -48,16 +48,3 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-
-      - name: Install jq (for JSON parsing)
-        run: sudo apt-get update && sudo apt-get install jq -y
-
-      - name: Make image public
-        if: github.event_name == 'release'
-        run: |
-          PACKAGE_NAME=$(echo "${{ env.IMAGE_NAME }}" | tr '/' '%2F')
-          curl -X PATCH \
-            -H "Authorization: Bearer ${{ secrets.GHCR_PAT }}" \
-            -H "Accept: application/vnd.github+json" \
-            https://api.github.com/orgs/${{ github.repository_owner }}/packages/container/${PACKAGE_NAME}/visibility \
-            -d '{"visibility":"public"}'
