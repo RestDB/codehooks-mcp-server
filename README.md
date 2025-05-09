@@ -67,7 +67,7 @@ Add the following to your `~/.cursor/mcp.json`:
     "codehooks": {
       "type": "mcp",
       "transport": "stdio",
-      "command": "docker run --rm -i -e CODEHOOKS_PROJECT_NAME=mybackend-fatb -e CODEHOOKS_ADMIN_TOKEN=72d4fd18a79be99c5cbfbf7dbe454093-c2516bb39524 -e CODEHOOKS_SPACE=dev ghcr.io/restdb/codehooks-mcp:latest"
+      "command": "docker run --rm -i -e CODEHOOKS_PROJECT_NAME=your_project_name -e CODEHOOKS_ADMIN_TOKEN=your_admin_token -e CODEHOOKS_SPACE=dev ghcr.io/restdb/codehooks-mcp:latest"
     }
   }
 }
@@ -125,16 +125,10 @@ The MCP server provides the following tools for interacting with your Codehooks.
 
    - Parameters: collection (required), query (optional), limit (optional)
 
-2. `deploy_code`: Deploy JavaScript code to your project
+2. `deploy_code`: Deploy JavaScript code to your project (NOT WORKING YET!)
 
    - Parameters: filename (required), code (required)
 
-3. `view_logs`: View project logs
-
-   - Parameters: limit (optional)
-
-4. `list_collections`: List available collections
-   - No parameters required
 
 ## Implementation Guide
 
