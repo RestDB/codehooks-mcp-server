@@ -1,4 +1,4 @@
-# Codehooks.io MCP Server
+# Codehooks.io MCP Server (under construction 🚧)
 
 This MCP (Model Context Protocol) server provides tools for interacting with codehooks.io projects through AI agents like Claude.
 
