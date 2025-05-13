@@ -58,7 +58,9 @@ const deployCodeSchema = z.object({
         content: z.string()
     })),
     main: z.string().optional(),
-    json: z.boolean().optional()
+    json: z.boolean().optional(),
+    projectId: z.string().optional(),
+    spaceId: z.string().optional()
 });
 
 // Add type inference
@@ -116,7 +118,9 @@ const tools = [
                     description: "Array of files to deploy"
                 },
                 main: { type: "string", description: "Application main file (defaults to 'index')" },
-                json: { type: "boolean", description: "Output JSON format" }
+                json: { type: "boolean", description: "Output JSON format" },
+                projectId: { type: "string", description: "Project ID" },
+                spaceId: { type: "string", description: "Space ID", default: "dev" }
             },
             required: ["files"]
         }
@@ -142,13 +146,12 @@ const server = new Server(
 async function executeCohoCommand(command: string): Promise<string> {
     console.error(`Executing command: coho ${command.replace(config.adminToken, '***')}`);
     try {
-        const { stdout, stderr } = await exec(`coho ${command} --admintoken ${config.adminToken}`);
+        const { stdout, stderr } = await exec(`coho ${command} --admintoken ${config.adminToken} `);
         if (stderr) {
-            console.error(`Command error: ${stderr}`);
-            throw new Error(stderr);
+            console.error(`Command output to stderr:`, stderr);
         }
         console.error(`Command successful`);
-        return stdout;
+        return stdout || stderr; // Return either stdout or stderr as some commands output to stderr
     } catch (error: any) {
         console.error(`Command failed: ${error?.message || 'Unknown error'}`);
         throw new McpError(ErrorCode.InvalidRequest, `Command failed: ${error?.message || 'Unknown error'}`);
@@ -172,12 +175,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     console.error(`Received tools/call request for: ${request.params.name}`);
 
     if (!config.projectId) {
-        console.error("Missing CODEHOOKS_PROJECT_NAME configuration");
-        throw new McpError(ErrorCode.InvalidRequest, "Missing required configuration: CODEHOOKS_PROJECT_NAME");
+        console.error("CODEHOOKS_PROJECT_NAME is not set, so you need to supply the Agent with the project name");
     }
 
     if (!config.adminToken) {
-        console.error("Missing CODEHOOKS_ADMIN_TOKEN configuration");
+        console.error("CODEHOOKS_ADMIN_TOKEN is not set, so you need to supply the Agent with the admin token");
         throw new McpError(ErrorCode.InvalidRequest, "Missing required configuration: CODEHOOKS_ADMIN_TOKEN");
     }
 
@@ -270,43 +272,129 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 const {
                     files,
                     main = "index",
-                    json = false
+                    json = false,
+                    projectId,
+                    spaceId
                 } = args as DeployCodeArgs;
 
                 console.error(`Deploying ${files.length} files`);
-
-                // Create temporary directory
                 const tmpDir = await fs.mkdtemp('/tmp/codehooks-deploy-');
+                console.error('Created temporary directory:', tmpDir);
+
                 try {
-                    // Write all files to the temporary directory
+                    // Write all files to the temporary directory with proper formatting
                     for (const file of files) {
-                        const filePath = `${tmpDir}/${file.path}`;
+                        const filePath = path.join(tmpDir, file.path);
                         // Ensure directory exists
                         await fs.mkdir(path.dirname(filePath), { recursive: true });
-                        await fs.writeFile(filePath, file.content);
+                        console.error(`Writing file: ${filePath}`);
+
+                        if (file.path === 'package.json') {
+                            // Create a properly structured package.json
+                            const defaultPackage = {
+                                name: projectId || config.projectId || "codehooks-project",
+                                version: "1.0.0",
+                                description: "Codehooks project",
+                                main: `${main}.js`,
+                                scripts: {
+                                    test: "echo \"Error: no test specified\" && exit 1"
+                                },
+                                author: "",
+                                license: "ISC",
+                                dependencies: {
+                                    "codehooks-js": "latest"
+                                }
+                            };
+
+                            // Merge with any existing package.json content
+                            let packageJson;
+                            try {
+                                packageJson = JSON.parse(file.content);
+                                packageJson = { ...defaultPackage, ...packageJson };
+                            } catch (e) {
+                                console.error('Invalid package.json content, using default');
+                                packageJson = defaultPackage;
+                            }
+
+                            // Write package.json with proper formatting
+                            await fs.writeFile(filePath, JSON.stringify(packageJson, null, 2));
+                        } else {
+                            await fs.writeFile(filePath, file.content);
+                        }
                     }
 
-                    const deployParams = [
-                        `--projectname ${config.projectId}`,
-                        `--space ${config.space}`,
-                        `--dir ${tmpDir}`,
-                        `--main ${main}`,
-                        json ? '--json' : ''
-                    ].filter(Boolean).join(' ');
+                    // Log directory contents
+                    console.error('Directory contents before npm install:');
+                    const { stdout: lsOutput } = await exec('ls -la', { cwd: tmpDir });
+                    console.error(lsOutput);
 
-                    const result = await executeCohoCommand(`deploy ${deployParams}`);
-                    return {
-                        content: [
-                            {
-                                type: "text",
-                                text: result
-                            }
-                        ],
-                        isError: false
-                    };
-                } finally {
-                    // Clean up temporary directory
-                    await fs.rm(tmpDir, { recursive: true, force: true });
+                    // Install dependencies
+                    try {
+                        console.error('Installing dependencies...');
+                        const { stdout: npmStdout, stderr: npmStderr } = await exec('npm install', { cwd: tmpDir });
+                        if (npmStderr) console.error('npm install stderr:', npmStderr);
+                        console.error('npm install stdout:', npmStdout);
+
+                        // Log directory contents after npm install
+                        console.error('Directory contents after npm install:');
+                        const { stdout: lsOutput2 } = await exec('ls -la', { cwd: tmpDir });
+                        console.error(lsOutput2);
+                    } catch (error: any) {
+                        console.error('npm install error:', error);
+                        throw new McpError(ErrorCode.InvalidRequest, `Failed to install dependencies: ${error.message}`);
+                    }
+
+                    // Change working directory to tmpDir
+                    const originalCwd = process.cwd();
+                    try {
+                        process.chdir(tmpDir);
+                        console.error('Changed working directory to:', tmpDir);
+
+                        // Log file contents before deployment
+                        console.error('File contents before deployment:');
+                        for (const file of files) {
+                            console.error(`\n=== ${file.path} ===`);
+                            const content = await fs.readFile(path.join(tmpDir, file.path), 'utf8');
+                            console.error(content);
+                        }
+
+                        // Construct command exactly like the working direct command
+                        const deployCommand = [
+                            'coho deploy',
+                            `--projectname ${projectId || config.projectId}`,
+                            `--space ${spaceId || config.space}`,
+                            `--main ${main}`,
+                            `--admintoken ${config.adminToken}`,
+                            json ? '--json' : ''
+                        ].filter(Boolean).join(' ');
+
+                        console.error('Executing deploy command...');
+                        const { stdout, stderr } = await exec(deployCommand);
+                        console.error('Deploy stdout:', stdout);
+                        if (stderr) console.error('Deploy stderr:', stderr);
+
+                        // Only clean up on success
+                        await fs.rm(tmpDir, { recursive: true, force: true });
+                        console.error('Cleaned up temporary directory:', tmpDir);
+
+                        return {
+                            content: [
+                                {
+                                    type: "text",
+                                    text: stdout || stderr || "Deployment successful"
+                                }
+                            ],
+                            isError: false
+                        };
+                    } finally {
+                        // Restore original working directory
+                        process.chdir(originalCwd);
+                        console.error('Restored working directory to:', originalCwd);
+                    }
+                } catch (error: any) {
+                    console.error(`Deployment failed. Temporary directory ${tmpDir} preserved for inspection.`);
+                    console.error('Error:', error);
+                    throw error;
                 }
             }
 
@@ -357,7 +445,7 @@ server.setRequestHandler(CompleteRequestSchema, async (request) => {
 // Start the server
 console.error("=== MCP Server Starting ===");
 console.error("Environment:");
-console.error(`- Project: ${config.projectId}`);
+console.error(`- Project: ${config.projectId || 'Not set, you need to supply the Agent with the project name'}`);
 console.error(`- Space: ${config.space}`);
 console.error(`- Admin token present: ${!!config.adminToken}`);
 
