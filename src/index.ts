@@ -64,18 +64,9 @@ const deployCodeSchema = z.object({
 });
 
 const fileUploadSchema = z.object({
-    // Single file upload fields
-    src: z.string().optional().describe("Source file path (for files in container)"),
-    filename: z.string().optional().describe("Target filename (required when using content)"),
-    content: z.string().optional().describe("File content as text or base64"),
+    content: z.string().describe("File content as text or base64"),
     encoding: z.enum(["text", "base64"]).optional().default("text").describe("Content encoding type"),
-    target: z.string().optional().describe("Target path on server"),
-    // Multiple files upload fields
-    files: z.array(z.object({
-        path: z.string().describe("Relative path within directory (e.g. 'src/index.js', 'images/logo.png')"),
-        content: z.string().describe("File content as text or base64"),
-        encoding: z.enum(["text", "base64"]).optional().default("text").describe("Content encoding type")
-    })).optional().describe("Array of files to upload as a directory")
+    target: z.string().describe("Target path/filename on server")
 });
 
 const fileDeleteSchema = z.object({
@@ -223,26 +214,12 @@ const tools = [
         inputSchema: {
             type: "object",
             properties: {
-                src: { type: "string", description: "Source file path (for files in container)" },
-                filename: { type: "string", description: "Target filename (required when using content)" },
                 content: { type: "string", description: "File content as text or base64" },
                 encoding: { type: "string", enum: ["text", "base64"], default: "text", description: "Content encoding type" },
-                target: { type: "string", description: "Target path on server" },
-                files: {
-                    type: "array",
-                    items: {
-                        type: "object",
-                        properties: {
-                            path: { type: "string", description: "Relative path within directory (e.g. 'src/index.js')" },
-                            content: { type: "string", description: "File content as text or base64" },
-                            encoding: { type: "string", enum: ["text", "base64"], default: "text", description: "Content encoding type" }
-                        },
-                        required: ["path", "content"]
-                    },
-                    description: "Array of files to upload as a directory (alternative to single file)"
-                }
+                target: { type: "string", description: "Target path/filename on server" },
             },
-            description: "Use either: 1) 'src' for file path, 2) 'filename'+'content' for single file, or 3) 'files' array for directory"
+            required: ["target", "content"],
+            description: "Upload file content to server with specified target path"
         }
     },
     {
@@ -683,120 +660,34 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             }
 
             case "file_upload": {
-                const { src, filename, content, encoding = "text", target, files } = args as FileUploadArgs;
+                const { content, encoding = "text", target } = args as FileUploadArgs;
 
-                // Check if this is a multiple files upload (directory)
-                if (files && files.length > 0) {
-                    // Multiple files upload (directory)
-                    const tempDir = `/tmp/upload-${Date.now()}`;
+                // Content-based upload (base64 or text)
+                const tempPath = `/tmp/${path.basename(target)}`;
 
-                    try {
-                        // Create temp directory
-                        await fs.mkdir(tempDir, { recursive: true });
-
-                        // Write all files to temp directory with proper structure
-                        for (const file of files) {
-                            const fullPath = path.join(tempDir, file.path);
-
-                            // Ensure directory exists for this file
-                            await fs.mkdir(path.dirname(fullPath), { recursive: true });
-
-                            if (file.encoding === "base64") {
-                                // Decode base64 content to binary
-                                const buffer = Buffer.from(file.content, 'base64');
-                                await fs.writeFile(fullPath, buffer);
-                            } else {
-                                // Write text content
-                                await fs.writeFile(fullPath, file.content, 'utf8');
-                            }
-                        }
-
-                        // Upload the entire temp directory
-                        const uploadParams = [
-                            `--project ${config.projectId}`,
-                            `--space ${config.space}`,
-                            `"${tempDir}"`,
-                            target ? `--target "${target}"` : ''
-                        ].filter(Boolean).join(' ');
-
-                        const result = await executeCohoCommand(`upload ${uploadParams}`);
-
-                        // Clean up temp directory
-                        await fs.rm(tempDir, { recursive: true, force: true });
-
-                        return {
-                            content: [
-                                {
-                                    type: "text",
-                                    text: result
-                                }
-                            ],
-                            isError: false
-                        };
-                    } catch (error: any) {
-                        // Clean up temp directory on error
-                        try {
-                            await fs.rm(tempDir, { recursive: true, force: true });
-                        } catch (unlinkError) {
-                            // Ignore cleanup errors
-                        }
-                        throw error;
+                try {
+                    if (encoding === "base64") {
+                        // Decode base64 content to binary
+                        const buffer = Buffer.from(content, 'base64');
+                        await fs.writeFile(tempPath, buffer);
+                    } else {
+                        // Write text content
+                        await fs.writeFile(tempPath, content, 'utf8');
                     }
-                } else if (content && filename) {
-                    // Content-based upload (base64 or text)
-                    const tempPath = `/tmp/${filename}`;
 
-                    try {
-                        if (encoding === "base64") {
-                            // Decode base64 content to binary
-                            const buffer = Buffer.from(content, 'base64');
-                            await fs.writeFile(tempPath, buffer);
-                        } else {
-                            // Write text content
-                            await fs.writeFile(tempPath, content, 'utf8');
-                        }
-
-                        // Upload the temporary file
-                        const uploadParams = [
-                            `--project ${config.projectId}`,
-                            `--space ${config.space}`,
-                            `"${tempPath}"`,
-                            target ? `--target "${target}"` : ''
-                        ].filter(Boolean).join(' ');
-
-                        const result = await executeCohoCommand(`upload ${uploadParams}`);
-
-                        // Clean up temporary file
-                        await fs.unlink(tempPath);
-
-                        return {
-                            content: [
-                                {
-                                    type: "text",
-                                    text: result
-                                }
-                            ],
-                            isError: false
-                        };
-                    } catch (error: any) {
-                        // Clean up temporary file on error
-                        try {
-                            await fs.unlink(tempPath);
-                        } catch (unlinkError) {
-                            // Ignore cleanup errors
-                        }
-                        throw error;
-                    }
-                } else if (src) {
-                    // File path-based upload (traditional)
+                    // Upload the temporary file
                     const uploadParams = [
-                        `--project ${config.projectId}`,
+                        `--projectname ${config.projectId}`,
                         `--space ${config.space}`,
-                        `"${src}"`,
-                        target ? `--target "${target}"` : ''
+                        `--src "${tempPath}"`,
+                        `--target "${target}"`
                     ].filter(Boolean).join(' ');
 
-                    const result = await executeCohoCommand(`upload ${uploadParams}`);
+                    const result = await executeCohoCommand(`file-upload ${uploadParams}`);
+
+                    // Clean up temporary file
+                    await fs.unlink(tempPath);
+
                     return {
                         content: [
                             {
@@ -806,8 +697,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                         ],
                         isError: false
                     };
-                } else {
-                    throw new McpError(ErrorCode.InvalidRequest, "Either 'src' (file path) or 'content' + 'filename' or 'files' array must be provided");
+                } catch (error: any) {
+                    // Clean up temporary file on error
+                    try {
+                        await fs.unlink(tempPath);
+                    } catch (unlinkError) {
+                        // Ignore cleanup errors
+                    }
+                    throw error;
                 }
             }
 
