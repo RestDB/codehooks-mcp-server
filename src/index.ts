@@ -63,21 +63,102 @@ const deployCodeSchema = z.object({
     spaceId: z.string().optional()
 });
 
+const fileUploadSchema = z.object({
+    src: z.string().describe("Source file or directory to upload"),
+    target: z.string().optional().describe("Target path on server"),
+});
+
+const fileDeleteSchema = z.object({
+    filename: z.string().describe("File to delete from server"),
+});
+
+const fileListSchema = z.object({
+    path: z.string().optional().describe("Path to list files from"),
+});
+
+const verifySchema = z.object({
+    dir: z.string().optional().describe("Directory to verify/compile (defaults to current dir)"),
+});
+
+const createIndexSchema = z.object({
+    collection: z.string().describe("Collection name"),
+    index: z.string().describe("Field(s) to add to query index"),
+});
+
+const dropIndexSchema = z.object({
+    collection: z.string().describe("Collection name"),
+    index: z.string().describe("Field(s) to remove from query index"),
+});
+
+const createCollectionSchema = z.object({
+    collection: z.string().describe("Name of collection to create"),
+});
+
+const dropCollectionSchema = z.object({
+    collection: z.string().describe("Name of collection to drop"),
+});
+
+const schemaSchema = z.object({
+    collection: z.string().describe("Collection name"),
+    schema: z.string().describe("JSON schema to add"),
+});
+
+const removeSchemaSchema = z.object({
+    collection: z.string().describe("Collection to remove schema from"),
+});
+
+const capCollectionSchema = z.object({
+    collection: z.string().describe("Collection name"),
+    cap: z.number().describe("Maximum number of documents"),
+    capdelay: z.number().optional().describe("Delay in seconds before capping"),
+});
+
+const uncapCollectionSchema = z.object({
+    collection: z.string().describe("Collection to remove cap from"),
+});
+
+const importSchema = z.object({
+    filepath: z.string().describe("File path to import from"),
+    collection: z.string().describe("Collection to import into"),
+    separator: z.string().optional().describe("CSV separator character"),
+    encoding: z.string().optional().describe("File encoding"),
+});
+
+const exportSchema = z.object({
+    collection: z.string().describe("Collection to export"),
+    filepath: z.string().optional().describe("File to save export data"),
+    csv: z.boolean().optional().describe("Export to CSV format"),
+});
+
 // Add type inference
 type QueryCollectionArgs = z.infer<typeof queryCollectionSchema>;
 type DeployCodeArgs = z.infer<typeof deployCodeSchema>;
+type FileUploadArgs = z.infer<typeof fileUploadSchema>;
+type FileDeleteArgs = z.infer<typeof fileDeleteSchema>;
+type FileListArgs = z.infer<typeof fileListSchema>;
+type VerifyArgs = z.infer<typeof verifySchema>;
+type CreateIndexArgs = z.infer<typeof createIndexSchema>;
+type DropIndexArgs = z.infer<typeof dropIndexSchema>;
+type CreateCollectionArgs = z.infer<typeof createCollectionSchema>;
+type DropCollectionArgs = z.infer<typeof dropCollectionSchema>;
+type SchemaArgs = z.infer<typeof schemaSchema>;
+type RemoveSchemaArgs = z.infer<typeof removeSchemaSchema>;
+type CapCollectionArgs = z.infer<typeof capCollectionSchema>;
+type UncapCollectionArgs = z.infer<typeof uncapCollectionSchema>;
+type ImportArgs = z.infer<typeof importSchema>;
+type ExportArgs = z.infer<typeof exportSchema>;
 
 // Tool definitions with JSON Schema for tools/list
 const tools = [
     {
         name: "query_collection",
-        description: "Query data from a collection using the Codehooks CLI",
+        description: "Query data from a collection. Supports URL-style, regex, and MongoDB-style JSON queries with comparison operators.",
         schema: queryCollectionSchema,
         inputSchema: {
             type: "object",
             properties: {
                 collection: { type: "string", description: "Collection name" },
-                query: { type: "string", description: "Query expression (e.g. 'name=Polly&type=Parrot' or 'name=/^po/')" },
+                query: { type: "string", description: "Query expression. Supports multiple formats: URL-style ('name=Polly&type=Parrot'), regex ('name=/^po/'), or MongoDB-style JSON ('{\"name\": \"Polly\", \"age\": {\"$gt\": 5}}' for complex queries with operators like $gt, $lt, $gte, $lte, $ne, $in, $nin, $exists, $regex)" },
                 count: { type: "boolean", description: "Count query results" },
                 delete: { type: "boolean", description: "Delete all items from query result" },
                 update: { type: "string", description: "Patch all items from query result with JSON string '{...}'" },
@@ -100,7 +181,7 @@ const tools = [
     },
     {
         name: "deploy_code",
-        description: "Deploy JavaScript code using the Codehooks CLI",
+        description: "Deploy JavaScript code to Codehooks.io project. For generating compatible backend code, use the comprehensive ChatGPT prompt template at https://codehooks.io/docs/chatgpt-backend-api-prompt which provides examples for REST APIs, NoSQL database operations, key-value store, worker queues, job scheduling, validation schemas, and more. Note: Codehooks.io has CORS built-in by default, so no additional CORS middleware is needed.",
         schema: deployCodeSchema,
         inputSchema: {
             type: "object",
@@ -123,6 +204,183 @@ const tools = [
                 spaceId: { type: "string", description: "Space ID", default: "dev" }
             },
             required: ["files"]
+        }
+    },
+    {
+        name: "file_upload",
+        description: "Upload files to server",
+        schema: fileUploadSchema,
+        inputSchema: {
+            type: "object",
+            properties: {
+                src: { type: "string", description: "Source file or directory to upload" },
+                target: { type: "string", description: "Target path on server" }
+            },
+            required: ["src"]
+        }
+    },
+    {
+        name: "file_delete",
+        description: "Delete a file from server",
+        schema: fileDeleteSchema,
+        inputSchema: {
+            type: "object",
+            properties: {
+                filename: { type: "string", description: "File to delete from server" }
+            },
+            required: ["filename"]
+        }
+    },
+    {
+        name: "file_list",
+        description: "List files from server",
+        schema: fileListSchema,
+        inputSchema: {
+            type: "object",
+            properties: {
+                path: { type: "string", description: "Path to list files from" }
+            }
+        }
+    },
+    {
+        name: "verify",
+        description: "Verify/compile code",
+        schema: verifySchema,
+        inputSchema: {
+            type: "object",
+            properties: {
+                dir: { type: "string", description: "Directory to verify/compile (defaults to current dir)" }
+            }
+        }
+    },
+    {
+        name: "create_index",
+        description: "Add field(s) to a query index",
+        schema: createIndexSchema,
+        inputSchema: {
+            type: "object",
+            properties: {
+                collection: { type: "string", description: "Collection name" },
+                index: { type: "string", description: "Field(s) to add to query index" }
+            },
+            required: ["collection", "index"]
+        }
+    },
+    {
+        name: "drop_index",
+        description: "Remove field(s) from a query index",
+        schema: dropIndexSchema,
+        inputSchema: {
+            type: "object",
+            properties: {
+                collection: { type: "string", description: "Collection name" },
+                index: { type: "string", description: "Field(s) to remove from query index" }
+            },
+            required: ["collection", "index"]
+        }
+    },
+    {
+        name: "create_collection",
+        description: "Create a new collection",
+        schema: createCollectionSchema,
+        inputSchema: {
+            type: "object",
+            properties: {
+                collection: { type: "string", description: "Name of collection to create" }
+            },
+            required: ["collection"]
+        }
+    },
+    {
+        name: "drop_collection",
+        description: "Delete a collection",
+        schema: dropCollectionSchema,
+        inputSchema: {
+            type: "object",
+            properties: {
+                collection: { type: "string", description: "Name of collection to drop" }
+            },
+            required: ["collection"]
+        }
+    },
+    {
+        name: "add_schema",
+        description: "Add a JSON schema to a collection",
+        schema: schemaSchema,
+        inputSchema: {
+            type: "object",
+            properties: {
+                collection: { type: "string", description: "Collection name" },
+                schema: { type: "string", description: "JSON schema to add" }
+            },
+            required: ["collection", "schema"]
+        }
+    },
+    {
+        name: "remove_schema",
+        description: "Remove JSON schema from a collection",
+        schema: removeSchemaSchema,
+        inputSchema: {
+            type: "object",
+            properties: {
+                collection: { type: "string", description: "Collection to remove schema from" }
+            },
+            required: ["collection"]
+        }
+    },
+    {
+        name: "cap_collection",
+        description: "Cap a collection",
+        schema: capCollectionSchema,
+        inputSchema: {
+            type: "object",
+            properties: {
+                collection: { type: "string", description: "Collection name" },
+                cap: { type: "number", description: "Maximum number of documents" },
+                capdelay: { type: "number", description: "Delay in seconds before capping" }
+            },
+            required: ["collection", "cap"]
+        }
+    },
+    {
+        name: "uncap_collection",
+        description: "Remove cap from a collection",
+        schema: uncapCollectionSchema,
+        inputSchema: {
+            type: "object",
+            properties: {
+                collection: { type: "string", description: "Collection to remove cap from" }
+            },
+            required: ["collection"]
+        }
+    },
+    {
+        name: "import",
+        description: "Import data from file",
+        schema: importSchema,
+        inputSchema: {
+            type: "object",
+            properties: {
+                filepath: { type: "string", description: "File path to import from" },
+                collection: { type: "string", description: "Collection to import into" },
+                separator: { type: "string", description: "CSV separator character" },
+                encoding: { type: "string", description: "File encoding" }
+            },
+            required: ["filepath", "collection"]
+        }
+    },
+    {
+        name: "export",
+        description: "Export data",
+        schema: exportSchema,
+        inputSchema: {
+            type: "object",
+            properties: {
+                collection: { type: "string", description: "Collection to export" },
+                filepath: { type: "string", description: "File to save export data" },
+                csv: { type: "boolean", description: "Export to CSV format" }
+            },
+            required: ["collection"]
         }
     }
 ];
@@ -398,8 +656,87 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 }
             }
 
-            default:
+            case "file_upload": {
+                const { src, target } = args as FileUploadArgs;
+                const targetArg = target ? ` --target "${target}"` : '';
+                return { output: await executeCohoCommand(`upload "${src}"${targetArg}`) };
+            }
+
+            case "file_delete": {
+                const { filename } = args as FileDeleteArgs;
+                return { output: await executeCohoCommand(`delete "${filename}"`) };
+            }
+
+            case "file_list": {
+                const { path } = args as FileListArgs;
+                const pathArg = path ? ` "${path}"` : '';
+                return { output: await executeCohoCommand(`files${pathArg}`) };
+            }
+
+            case "verify": {
+                const { dir } = args as VerifyArgs;
+                const dirArg = dir ? ` "${dir}"` : '';
+                return { output: await executeCohoCommand(`verify${dirArg}`) };
+            }
+
+            case "create_index": {
+                const { collection, index } = args as CreateIndexArgs;
+                return { output: await executeCohoCommand(`createindex "${collection}" "${index}"`) };
+            }
+
+            case "drop_index": {
+                const { collection, index } = args as DropIndexArgs;
+                return { output: await executeCohoCommand(`dropindex "${collection}" "${index}"`) };
+            }
+
+            case "create_collection": {
+                const { collection } = args as CreateCollectionArgs;
+                return { output: await executeCohoCommand(`createcoll "${collection}"`) };
+            }
+
+            case "drop_collection": {
+                const { collection } = args as DropCollectionArgs;
+                return { output: await executeCohoCommand(`dropcoll "${collection}"`) };
+            }
+
+            case "add_schema": {
+                const { collection, schema } = args as SchemaArgs;
+                return { output: await executeCohoCommand(`schema "${collection}" '${schema}'`) };
+            }
+
+            case "remove_schema": {
+                const { collection } = args as RemoveSchemaArgs;
+                return { output: await executeCohoCommand(`remove-schema "${collection}"`) };
+            }
+
+            case "cap_collection": {
+                const { collection, cap, capdelay } = args as CapCollectionArgs;
+                const capdelayArg = capdelay ? ` --capdelay ${capdelay}` : '';
+                return { output: await executeCohoCommand(`cap "${collection}" ${cap}${capdelayArg}`) };
+            }
+
+            case "uncap_collection": {
+                const { collection } = args as UncapCollectionArgs;
+                return { output: await executeCohoCommand(`uncap "${collection}"`) };
+            }
+
+            case "import": {
+                const { filepath, collection, separator, encoding } = args as ImportArgs;
+                const separatorArg = separator ? ` --separator "${separator}"` : '';
+                const encodingArg = encoding ? ` --encoding "${encoding}"` : '';
+                return { output: await executeCohoCommand(`import -f "${filepath}" -c "${collection}"${separatorArg}${encodingArg}`) };
+            }
+
+            case "export": {
+                const { collection, filepath, csv } = args as ExportArgs;
+                const filepathArg = filepath ? ` -f "${filepath}"` : '';
+                const csvArg = csv ? ' --csv' : '';
+                return { output: await executeCohoCommand(`export "${collection}"${filepathArg}${csvArg}`) };
+            }
+
+            default: {
                 throw new McpError(ErrorCode.MethodNotFound, "Tool not found");
+            }
         }
     } catch (error) {
         if (error instanceof McpError) {
