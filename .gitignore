@@ -4,3 +4,4 @@ build/
 *.log 
 run.sh
 test.sh
+mcp*.json
