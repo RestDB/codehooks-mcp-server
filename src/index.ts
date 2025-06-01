@@ -70,15 +70,15 @@ const fileUploadSchema = z.object({
 });
 
 const fileDeleteSchema = z.object({
-    filename: z.string().describe("File to delete from server"),
+    filename: z.string().optional().describe("Delete file with match on absolute path/filename"),
+    match: z.string().optional().describe("Delete multiple files that match regular expression to a file path"),
+    dryrun: z.boolean().optional().describe("Output files to delete without performing the action")
+}).refine(data => data.filename || data.match, {
+    message: "Either filename or match must be provided"
 });
 
 const fileListSchema = z.object({
     path: z.string().optional().describe("Path to list files from"),
-});
-
-const verifySchema = z.object({
-    dir: z.string().optional().describe("Directory to verify/compile (defaults to current dir)"),
 });
 
 const createIndexSchema = z.object({
@@ -137,7 +137,6 @@ type DeployCodeArgs = z.infer<typeof deployCodeSchema>;
 type FileUploadArgs = z.infer<typeof fileUploadSchema>;
 type FileDeleteArgs = z.infer<typeof fileDeleteSchema>;
 type FileListArgs = z.infer<typeof fileListSchema>;
-type VerifyArgs = z.infer<typeof verifySchema>;
 type CreateIndexArgs = z.infer<typeof createIndexSchema>;
 type DropIndexArgs = z.infer<typeof dropIndexSchema>;
 type CreateCollectionArgs = z.infer<typeof createCollectionSchema>;
@@ -229,9 +228,14 @@ const tools = [
         inputSchema: {
             type: "object",
             properties: {
-                filename: { type: "string", description: "File to delete from server" }
+                filename: { type: "string", description: "Delete file with match on absolute path/filename" },
+                match: { type: "string", description: "Delete multiple files that match regular expression to a file path" },
+                dryrun: { type: "boolean", description: "Output files to delete without performing the action" }
             },
-            required: ["filename"]
+            oneOf: [
+                { required: ["filename"] },
+                { required: ["match"] }
+            ]
         }
     },
     {
@@ -242,17 +246,6 @@ const tools = [
             type: "object",
             properties: {
                 path: { type: "string", description: "Path to list files from" }
-            }
-        }
-    },
-    {
-        name: "verify",
-        description: "Verify/compile code",
-        schema: verifySchema,
-        inputSchema: {
-            type: "object",
-            properties: {
-                dir: { type: "string", description: "Directory to verify/compile (defaults to current dir)" }
             }
         }
     },
@@ -709,11 +702,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             }
 
             case "file_delete": {
-                const { filename } = args as FileDeleteArgs;
+                const { filename, match, dryrun } = args as FileDeleteArgs;
                 const deleteParams = [
-                    `--project ${config.projectId}`,
+                    `--projectname ${config.projectId}`,
                     `--space ${config.space}`,
-                    `"${filename}"`
+                    filename ? `--filename "${filename}"` : '',
+                    match ? `--match "${match}"` : '',
+                    dryrun ? '--dryrun' : ''
                 ].filter(Boolean).join(' ');
                 const result = await executeCohoCommand(`delete ${deleteParams}`);
                 return {
@@ -735,25 +730,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                     path ? `"${path}"` : ''
                 ].filter(Boolean).join(' ');
                 const result = await executeCohoCommand(`files ${fileParams}`);
-                return {
-                    content: [
-                        {
-                            type: "text",
-                            text: result
-                        }
-                    ],
-                    isError: false
-                };
-            }
-
-            case "verify": {
-                const { dir } = args as VerifyArgs;
-                const verifyParams = [
-                    `--project ${config.projectId}`,
-                    `--space ${config.space}`,
-                    dir ? `"${dir}"` : ''
-                ].filter(Boolean).join(' ');
-                const result = await executeCohoCommand(`verify ${verifyParams}`);
                 return {
                     content: [
                         {
@@ -1030,4 +1006,4 @@ console.error("\nStarting MCP transport...");
 const transport = new StdioServerTransport();
 console.error("Connecting to transport...");
 await server.connect(transport);
-console.error("Server ready for requests"); 
+console.error("Server ready for requests");
