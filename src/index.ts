@@ -400,7 +400,9 @@ const server = new Server(
 async function executeCohoCommand(command: string): Promise<string> {
     console.error(`Executing command: coho ${command.replace(config.adminToken, '***')}`);
     try {
-        const { stdout, stderr } = await exec(`coho ${command} --admintoken ${config.adminToken} `);
+        const { stdout, stderr } = await exec(`coho ${command} --admintoken ${config.adminToken} `, {
+            timeout: 120000 // 2 minutes timeout for CLI operations
+        });
         if (stderr) {
             console.error(`Command output to stderr:`, stderr);
         }
