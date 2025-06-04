@@ -152,13 +152,13 @@ type ExportArgs = z.infer<typeof exportSchema>;
 const tools = [
     {
         name: "query_collection",
-        description: "Query data from a collection. Supports URL-style, regex, and MongoDB-style JSON queries with comparison operators.",
+        description: "Query data from a collection. Supports URL-style, regex, and MongoDB-style JSON queries with comparison operators. Can also query system collections like '_hooks' which contains deployment metadata including available API endpoints. Using delete, update or replace is very powerful but also dangerous, so use with caution.",
         schema: queryCollectionSchema,
         inputSchema: {
             type: "object",
             properties: {
-                collection: { type: "string", description: "Collection name" },
-                query: { type: "string", description: "Query expression. Supports multiple formats: URL-style ('name=Polly&type=Parrot'), regex ('name=/^po/'), or MongoDB-style JSON ('{\"name\": \"Polly\", \"age\": {\"$gt\": 5}}' for complex queries with operators like $gt, $lt, $gte, $lte, $ne, $in, $nin, $exists, $regex)" },
+                collection: { type: "string", description: "Collection name. Use '_hooks' to query deployment metadata and discover available API endpoints." },
+                query: { type: "string", description: "Query expression. Supports multiple formats: URL-style ('name=Polly&type=Parrot'), regex ('name=/^po/'), or MongoDB-style JSON ('{\"name\": \"Polly\", \"age\": {\"$gt\": 5}}' for complex queries with operators like $gt, $lt, $gte, $lte, $ne, $in, $nin, $exists, $regex). To get the latest deployment info with API endpoints, use: collection='_hooks', limit=1, reverse=true (check the routehooks property for the available API endpoints)" },
                 count: { type: "boolean", description: "Count query results" },
                 delete: { type: "boolean", description: "Delete all items from query result" },
                 update: { type: "string", description: "Patch all items from query result with JSON string '{...}'" },
@@ -166,13 +166,13 @@ const tools = [
                 useindex: { type: "string", description: "Use an indexed field to scan data in query" },
                 start: { type: "string", description: "Start value for index scan" },
                 end: { type: "string", description: "End value for index scan" },
-                limit: { type: "number", description: "Limit query result" },
+                limit: { type: "number", description: "Limit query result. Use limit=1 and reverse to get latest deployment from _hooks collection" },
                 fields: { type: "string", description: "Comma separated list of fields to include" },
-                sort: { type: "string", description: "Comma separated list of fields to sort by" },
+                sort: { type: "string", description: "Comma separated list of fields to sort by. Use '_id' to sort by creation time" },
                 offset: { type: "number", description: "Skip items before returning data in query result" },
                 enqueue: { type: "string", description: "Add query result to queue topic" },
                 pretty: { type: "boolean", description: "Output data with formatting and colors" },
-                reverse: { type: "boolean", description: "Scan index in reverse order" },
+                reverse: { type: "boolean", description: "Scan index in reverse order. Use with sort='_id' to get newest records first" },
                 table: { type: "boolean", description: "Output data as formatted table" },
                 csv: { type: "boolean", description: "Output data in CSV format" }
             },
@@ -181,7 +181,7 @@ const tools = [
     },
     {
         name: "deploy_code",
-        description: "Deploy JavaScript code to Codehooks.io project. For generating compatible backend code, use the comprehensive ChatGPT prompt template at https://codehooks.io/docs/chatgpt-backend-api-prompt which provides examples for REST APIs, NoSQL database operations, key-value store, worker queues, job scheduling, validation schemas, and more. Note: Codehooks.io has CORS built-in by default, so no additional CORS middleware is needed.",
+        description: "Deploy JavaScript code to Codehooks.io project. For generating compatible backend code, use the comprehensive ChatGPT prompt template at https://codehooks.io/docs/chatgpt-backend-api-prompt which provides examples for REST APIs, NoSQL database operations, key-value store, worker queues, job scheduling, validation schemas, and more. Note: Codehooks.io has CORS built-in by default, so no additional CORS middleware is needed. If the users want to build workflows, use the Workflow API (https://codehooks.io/docs/workflow-api) which is a powerful tool for building complex workflows.",
         schema: deployCodeSchema,
         inputSchema: {
             type: "object",
