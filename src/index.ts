@@ -48,7 +48,6 @@ const queryCollectionSchema = z.object({
     enqueue: z.string().optional(),
     pretty: z.boolean().optional(),
     reverse: z.boolean().optional(),
-    table: z.boolean().optional(),
     csv: z.boolean().optional()
 });
 
@@ -173,7 +172,6 @@ const tools = [
                 enqueue: { type: "string", description: "Add query result to queue topic" },
                 pretty: { type: "boolean", description: "Output data with formatting and colors" },
                 reverse: { type: "boolean", description: "Scan index in reverse order. Use with sort='_id' to get newest records first" },
-                table: { type: "boolean", description: "Output data as formatted table" },
                 csv: { type: "boolean", description: "Output data in CSV format" }
             },
             required: ["collection"]
@@ -468,7 +466,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                     enqueue,
                     pretty = false,
                     reverse = false,
-                    table = false,
                     csv = false
                 } = args as QueryCollectionArgs;
 
@@ -493,14 +490,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                     enqueue ? `--enqueue ${enqueue}` : '',
                     pretty ? '--pretty' : '',
                     reverse ? '--reverse' : '',
-                    table ? '--table' : '',
                     csv ? '--csv' : ''
                 ].filter(Boolean).join(' ');
 
                 const result = await executeCohoCommand(`query ${queryParams}`);
 
-                // If the output is CSV or table format, return as is
-                if (csv || table || pretty) {
+                // If the output is CSV or pretty format, return as is
+                if (csv || pretty) {
                     return {
                         content: [
                             {
