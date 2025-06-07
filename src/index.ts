@@ -69,11 +69,9 @@ const fileUploadSchema = z.object({
 });
 
 const fileDeleteSchema = z.object({
-    filename: z.string().optional().describe("Delete file with match on absolute path/filename"),
-    match: z.string().optional().describe("Delete multiple files that match regular expression to a file path"),
+    filename: z.string().optional().describe("Delete file with match on absolute path/filename. Use this or 'match'."),
+    match: z.string().optional().describe("Delete multiple files that match regular expression to a file path. Use this or 'filename'."),
     dryrun: z.boolean().optional().describe("Output files to delete without performing the action")
-}).refine(data => data.filename || data.match, {
-    message: "Either filename or match must be provided"
 });
 
 const fileListSchema = z.object({
@@ -179,7 +177,7 @@ const tools = [
     },
     {
         name: "deploy_code",
-        description: "Deploy JavaScript code to Codehooks.io project. For generating compatible backend code, use the comprehensive ChatGPT prompt template at https://codehooks.io/docs/chatgpt-backend-api-prompt which provides examples for REST APIs, NoSQL database operations, key-value store, worker queues, job scheduling, validation schemas, and more. Note: Codehooks.io has CORS built-in by default, so no additional CORS middleware is needed. If the users want to build workflows, use the Workflow API (https://codehooks.io/docs/workflow-api) which is a powerful tool for building complex workflows.",
+        description: "Deploy JavaScript code to Codehooks.io project. \n\nMINIMAL WORKING EXAMPLE:\n```javascript\nimport { app } from 'codehooks-js';\n\napp.get('/hello', (req, res) => {\n  res.json({ message: 'Hello, world!' });\n});\n\n// MANDATORY: bind to serverless runtime\nexport default app.init();\n```\n\nKEY REQUIREMENTS:\n- Always import from 'codehooks-js'\n- Always end with `export default app.init();`\n- Use app.get(), app.post(), app.put(), app.delete() for routes\n- For database: `const conn = await Datastore.open(); conn.insertOne(collection, data);`\n- Package.json will be auto-generated if not provided\n\nFor comprehensive examples, see: https://codehooks.io/docs/chatgpt-backend-api-prompt\n\nNote: Codehooks.io has CORS built-in by default, so no additional CORS middleware is needed. If the users want to build workflows, use the Workflow API (https://codehooks.io/docs/workflow-api) which is a powerful tool for building complex workflows.",
         schema: deployCodeSchema,
         inputSchema: {
             type: "object",
@@ -226,14 +224,10 @@ const tools = [
         inputSchema: {
             type: "object",
             properties: {
-                filename: { type: "string", description: "Delete file with match on absolute path/filename" },
-                match: { type: "string", description: "Delete multiple files that match regular expression to a file path" },
+                filename: { type: "string", description: "Delete file with match on absolute path/filename. Use this or 'match'." },
+                match: { type: "string", description: "Delete multiple files that match regular expression to a file path. Use this or 'filename'." },
                 dryrun: { type: "boolean", description: "Output files to delete without performing the action" }
-            },
-            oneOf: [
-                { required: ["filename"] },
-                { required: ["match"] }
-            ]
+            }
         }
     },
     {
@@ -396,7 +390,7 @@ const server = new Server(
 
 // Helper function to execute coho CLI commands
 async function executeCohoCommand(command: string): Promise<string> {
-    console.error(`Executing command: coho ${command.replace(config.adminToken, '***')}`);
+    console.error(`Executing command: coho ${command} --admintoken ${config.adminToken.substring(0, 5)}...`);
     try {
         const { stdout, stderr } = await exec(`coho ${command} --admintoken ${config.adminToken} `, {
             timeout: 120000 // 2 minutes timeout for CLI operations
@@ -428,13 +422,14 @@ server.setRequestHandler(ListToolsRequestSchema, async (request) => {
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
     console.error(`Received tools/call request for: ${request.params.name}`);
 
-    if (!config.projectId) {
+    if (!config.projectId || config.projectId.trim() === '') {
         console.error("CODEHOOKS_PROJECT_NAME is not set, so you need to supply the Agent with the project name");
+        throw new McpError(ErrorCode.InvalidRequest, "Missing required configuration: CODEHOOKS_PROJECT_NAME must be set.");
     }
 
-    if (!config.adminToken) {
+    if (!config.adminToken || config.adminToken.trim() === '') {
         console.error("CODEHOOKS_ADMIN_TOKEN is not set, so you need to supply the Agent with the admin token");
-        throw new McpError(ErrorCode.InvalidRequest, "Missing required configuration: CODEHOOKS_ADMIN_TOKEN");
+        throw new McpError(ErrorCode.InvalidRequest, "Missing required configuration: CODEHOOKS_ADMIN_TOKEN must be set and not empty.");
     }
 
     const tool = tools.find(t => t.name === request.params.name);
@@ -529,13 +524,41 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                     spaceId
                 } = args as DeployCodeArgs;
 
-                console.error(`Deploying ${files.length} files`);
+                // Check if package.json is provided, if not create a default one
+                const hasPackageJson = files.some(file => file.path === 'package.json');
+                let filesToDeploy = [...files];
+
+                if (!hasPackageJson) {
+                    console.error('No package.json provided, creating default one');
+                    const defaultPackageJson = {
+                        name: projectId || config.projectId || "codehooks-project",
+                        version: "1.0.0",
+                        description: "Codehooks project",
+                        type: "module",
+                        main: `${main}.js`,
+                        scripts: {
+                            test: "echo \"Error: no test specified\" && exit 1"
+                        },
+                        author: "",
+                        license: "ISC",
+                        dependencies: {
+                            "codehooks-js": "latest"
+                        }
+                    };
+
+                    filesToDeploy.push({
+                        path: 'package.json',
+                        content: JSON.stringify(defaultPackageJson, null, 2)
+                    });
+                }
+
+                console.error(`Deploying ${filesToDeploy.length} files`);
                 const tmpDir = await fs.mkdtemp('/tmp/codehooks-deploy-');
                 console.error('Created temporary directory:', tmpDir);
 
                 try {
                     // Write all files to the temporary directory with proper formatting
-                    for (const file of files) {
+                    for (const file of filesToDeploy) {
                         const filePath = path.join(tmpDir, file.path);
                         // Ensure directory exists
                         await fs.mkdir(path.dirname(filePath), { recursive: true });
@@ -604,7 +627,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
                         // Log file contents before deployment
                         console.error('File contents before deployment:');
-                        for (const file of files) {
+                        for (const file of filesToDeploy) {
                             console.error(`\n=== ${file.path} ===`);
                             const content = await fs.readFile(path.join(tmpDir, file.path), 'utf8');
                             console.error(content);
@@ -701,6 +724,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
             case "file_delete": {
                 const { filename, match, dryrun } = args as FileDeleteArgs;
+
+                if (!filename && !match) {
+                    throw new McpError(ErrorCode.InvalidRequest, "Either 'filename' or 'match' must be provided.");
+                }
+
                 const deleteParams = [
                     `--projectname ${config.projectId}`,
                     `--space ${config.space}`,
@@ -708,7 +736,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                     match ? `--match "${match}"` : '',
                     dryrun ? '--dryrun' : ''
                 ].filter(Boolean).join(' ');
-                const result = await executeCohoCommand(`delete ${deleteParams}`);
+                const result = await executeCohoCommand(`file-delete ${deleteParams}`);
                 return {
                     content: [
                         {
@@ -727,7 +755,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                     `--space ${config.space}`,
                     path ? `"${path}"` : ''
                 ].filter(Boolean).join(' ');
-                const result = await executeCohoCommand(`files ${fileParams}`);
+                const result = await executeCohoCommand(`file-list ${fileParams}`);
                 return {
                     content: [
                         {
@@ -822,10 +850,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 const schemaParams = [
                     `--project ${config.projectId}`,
                     `--space ${config.space}`,
-                    `"${collection}"`,
-                    `'${schema}'`
+                    `--collection ${collection}`,
+                    `--schema '${schema}'`
                 ].filter(Boolean).join(' ');
-                const result = await executeCohoCommand(`schema ${schemaParams}`);
+                const result = await executeCohoCommand(`add-schema ${schemaParams}`);
                 return {
                     content: [
                         {
@@ -842,7 +870,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 const removeSchemaParams = [
                     `--project ${config.projectId}`,
                     `--space ${config.space}`,
-                    `"${collection}"`
+                    `--collection ${collection}`
                 ].filter(Boolean).join(' ');
                 const result = await executeCohoCommand(`remove-schema ${removeSchemaParams}`);
                 return {
