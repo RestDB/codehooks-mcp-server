@@ -129,6 +129,32 @@ const exportSchema = z.object({
     csv: z.boolean().optional().describe("Export to CSV format"),
 });
 
+const kvGetSchema = z.object({
+    key: z.string().optional().default("*").describe("Key to match, or key* to fetch list"),
+    keyspace: z.string().optional().describe("Keyspace to scan"),
+    text: z.boolean().optional().describe("Output info as text line"),
+});
+
+const kvSetSchema = z.object({
+    key: z.string().describe("Key to set"),
+    val: z.string().describe("Value to set"),
+    keyspace: z.string().optional().describe("Keyspace to use"),
+    ttl: z.number().optional().describe("Time to live in millis for value"),
+    json: z.boolean().optional().describe("Output info as JSON (not table)"),
+});
+
+const kvDelSchema = z.object({
+    key: z.string().describe("Key to delete"),
+    keyspace: z.string().optional().describe("Keyspace to use"),
+    json: z.boolean().optional().describe("Output info as JSON (not table)"),
+});
+
+const logSchema = z.object({
+    tail: z.number().optional().default(100).describe("Chop log to n lines"),
+    follow: z.boolean().optional().describe("Keep log stream open"),
+    context: z.string().optional().describe("Filter log on: jobhooks, queuehooks, routehooks, datahooks, auth"),
+});
+
 // Add type inference
 type QueryCollectionArgs = z.infer<typeof queryCollectionSchema>;
 type DeployCodeArgs = z.infer<typeof deployCodeSchema>;
@@ -145,6 +171,10 @@ type CapCollectionArgs = z.infer<typeof capCollectionSchema>;
 type UncapCollectionArgs = z.infer<typeof uncapCollectionSchema>;
 type ImportArgs = z.infer<typeof importSchema>;
 type ExportArgs = z.infer<typeof exportSchema>;
+type KvGetArgs = z.infer<typeof kvGetSchema>;
+type KvSetArgs = z.infer<typeof kvSetSchema>;
+type KvDelArgs = z.infer<typeof kvDelSchema>;
+type LogArgs = z.infer<typeof logSchema>;
 
 // Tool definitions with JSON Schema for tools/list
 const tools = [
@@ -371,6 +401,62 @@ const tools = [
                 csv: { type: "boolean", description: "Export to CSV format" }
             },
             required: ["collection"]
+        }
+    },
+    {
+        name: "kv_get",
+        description: "Retrieve key-value pair(s) from a space. Supports pattern matching with wildcards.",
+        schema: kvGetSchema,
+        inputSchema: {
+            type: "object",
+            properties: {
+                key: { type: "string", description: "Key to match, or key* to fetch list", default: "*" },
+                keyspace: { type: "string", description: "Keyspace to scan" },
+                text: { type: "boolean", description: "Output info as text line" }
+            }
+        }
+    },
+    {
+        name: "kv_set",
+        description: "Set key-value pair in a space with optional TTL and keyspace.",
+        schema: kvSetSchema,
+        inputSchema: {
+            type: "object",
+            properties: {
+                key: { type: "string", description: "Key to set" },
+                val: { type: "string", description: "Value to set" },
+                keyspace: { type: "string", description: "Keyspace to use" },
+                ttl: { type: "number", description: "Time to live in millis for value" },
+                json: { type: "boolean", description: "Output info as JSON (not table)" }
+            },
+            required: ["key", "val"]
+        }
+    },
+    {
+        name: "kv_del",
+        description: "Delete key-value pair in a space.",
+        schema: kvDelSchema,
+        inputSchema: {
+            type: "object",
+            properties: {
+                key: { type: "string", description: "Key to delete" },
+                keyspace: { type: "string", description: "Keyspace to use" },
+                json: { type: "boolean", description: "Output info as JSON (not table)" }
+            },
+            required: ["key"]
+        }
+    },
+    {
+        name: "logs",
+        description: "Show system logs for a space with filtering and follow options.",
+        schema: logSchema,
+        inputSchema: {
+            type: "object",
+            properties: {
+                tail: { type: "number", description: "Chop log to n lines", default: 100 },
+                follow: { type: "boolean", description: "Keep log stream open" },
+                context: { type: "string", description: "Filter log on: jobhooks, queuehooks, routehooks, datahooks, auth" }
+            }
         }
     }
 ];
@@ -1005,6 +1091,92 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                     csv ? '--csv' : ''
                 ].filter(Boolean).join(' ');
                 const result = await executeCohoCommand(`export ${exportParams}`);
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: result
+                        }
+                    ],
+                    isError: false
+                };
+            }
+
+            case "kv_get": {
+                const { key = "*", keyspace, text } = args as KvGetArgs;
+                const getParams = [
+                    `--project ${config.projectId}`,
+                    `--space ${config.space}`,
+                    `--key "${key}"`,
+                    keyspace ? `--keyspace "${keyspace}"` : '',
+                    text ? '--text' : ''
+                ].filter(Boolean).join(' ');
+                const result = await executeCohoCommand(`get ${getParams}`);
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: result
+                        }
+                    ],
+                    isError: false
+                };
+            }
+
+            case "kv_set": {
+                const { key, val, keyspace, ttl, json } = args as KvSetArgs;
+                const setParams = [
+                    `--project ${config.projectId}`,
+                    `--space ${config.space}`,
+                    `--key "${key}"`,
+                    `--val "${val}"`,
+                    keyspace ? `--keyspace "${keyspace}"` : '',
+                    ttl ? `--ttl ${ttl}` : '',
+                    json ? '--json' : ''
+                ].filter(Boolean).join(' ');
+                const result = await executeCohoCommand(`set ${setParams}`);
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: result
+                        }
+                    ],
+                    isError: false
+                };
+            }
+
+            case "kv_del": {
+                const { key, keyspace, json } = args as KvDelArgs;
+                const delParams = [
+                    `--project ${config.projectId}`,
+                    `--space ${config.space}`,
+                    `--key "${key}"`,
+                    keyspace ? `--keyspace "${keyspace}"` : '',
+                    json ? '--json' : ''
+                ].filter(Boolean).join(' ');
+                const result = await executeCohoCommand(`del ${delParams}`);
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: result
+                        }
+                    ],
+                    isError: false
+                };
+            }
+
+            case "logs": {
+                const { tail = 100, follow, context } = args as LogArgs;
+                const logParams = [
+                    `--project ${config.projectId}`,
+                    `--space ${config.space}`,
+                    `--tail ${tail}`,
+                    follow ? '--follow' : '',
+                    context ? `--context "${context}"` : ''
+                ].filter(Boolean).join(' ');
+                const result = await executeCohoCommand(`log ${logParams}`);
                 return {
                     content: [
                         {
