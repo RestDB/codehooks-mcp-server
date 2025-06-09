@@ -5,3 +5,4 @@ build/
 run.sh
 test.sh
 mcp*.json
+TESTING_STATUS.md
