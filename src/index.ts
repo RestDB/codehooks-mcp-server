@@ -116,7 +116,8 @@ const uncapCollectionSchema = z.object({
 });
 
 const importSchema = z.object({
-    filepath: z.string().describe("File path to import from"),
+    filepath: z.string().optional().describe("File path to import from (optional if content is provided)"),
+    content: z.string().optional().describe("File content to import (JSON or CSV data)"),
     collection: z.string().describe("Collection to import into"),
     separator: z.string().optional().describe("CSV separator character"),
     encoding: z.string().optional().describe("File encoding"),
@@ -124,7 +125,7 @@ const importSchema = z.object({
 
 const exportSchema = z.object({
     collection: z.string().describe("Collection to export"),
-    filepath: z.string().optional().describe("File to save export data"),
+    filepath: z.string().optional().describe("File to save export data (optional, will return content if not specified)"),
     csv: z.boolean().optional().describe("Export to CSV format"),
 });
 
@@ -293,13 +294,13 @@ const tools = [
     },
     {
         name: "add_schema",
-        description: "Add a JSON schema to a collection",
+        description: "Add a JSON schema to a collection. Provide the schema content as a JSON string.",
         schema: schemaSchema,
         inputSchema: {
             type: "object",
             properties: {
                 collection: { type: "string", description: "Collection name" },
-                schema: { type: "string", description: "JSON schema to add" }
+                schema: { type: "string", description: "JSON schema content as a string (will be written to temporary file for CLI)" }
             },
             required: ["collection", "schema"]
         }
@@ -344,28 +345,29 @@ const tools = [
     },
     {
         name: "import",
-        description: "Import data from file",
+        description: "Import data from file or content. Provide either 'filepath' (for files inside Docker container) or 'content' (JSON/CSV data as string).",
         schema: importSchema,
         inputSchema: {
             type: "object",
             properties: {
-                filepath: { type: "string", description: "File path to import from" },
+                filepath: { type: "string", description: "File path to import from (optional if content is provided)" },
+                content: { type: "string", description: "File content to import as JSON or CSV data (optional if filepath is provided)" },
                 collection: { type: "string", description: "Collection to import into" },
                 separator: { type: "string", description: "CSV separator character" },
                 encoding: { type: "string", description: "File encoding" }
             },
-            required: ["filepath", "collection"]
+            required: ["collection"]
         }
     },
     {
         name: "export",
-        description: "Export data",
+        description: "Export data from collection. If no filepath specified, returns the exported content directly. If filepath specified, saves to file inside Docker container.",
         schema: exportSchema,
         inputSchema: {
             type: "object",
             properties: {
                 collection: { type: "string", description: "Collection to export" },
-                filepath: { type: "string", description: "File to save export data" },
+                filepath: { type: "string", description: "File to save export data (optional, will return content if not specified)" },
                 csv: { type: "boolean", description: "Export to CSV format" }
             },
             required: ["collection"]
@@ -795,7 +797,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                     `"${collection}"`,
                     `"${index}"`
                 ].filter(Boolean).join(' ');
-                const result = await executeCohoCommand(`dropindex ${dropIndexParams}`);
+                const result = await executeCohoCommand(`removeindex ${dropIndexParams}`);
                 return {
                     content: [
                         {
@@ -814,7 +816,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                     `--space ${config.space}`,
                     `"${collection}"`
                 ].filter(Boolean).join(' ');
-                const result = await executeCohoCommand(`createcoll ${createCollParams}`);
+                const result = await executeCohoCommand(`createcollection ${createCollParams}`);
                 return {
                     content: [
                         {
@@ -833,7 +835,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                     `--space ${config.space}`,
                     `"${collection}"`
                 ].filter(Boolean).join(' ');
-                const result = await executeCohoCommand(`dropcoll ${dropCollParams}`);
+                const result = await executeCohoCommand(`dropcollection ${dropCollParams}`);
                 return {
                     content: [
                         {
@@ -847,22 +849,40 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
             case "add_schema": {
                 const { collection, schema } = args as SchemaArgs;
-                const schemaParams = [
-                    `--project ${config.projectId}`,
-                    `--space ${config.space}`,
-                    `--collection ${collection}`,
-                    `--schema '${schema}'`
-                ].filter(Boolean).join(' ');
-                const result = await executeCohoCommand(`add-schema ${schemaParams}`);
-                return {
-                    content: [
-                        {
-                            type: "text",
-                            text: result
-                        }
-                    ],
-                    isError: false
-                };
+
+                // Create a temporary file with the schema content
+                const tempSchemaPath = `/tmp/schema_${Date.now()}.json`;
+
+                try {
+                    await fs.writeFile(tempSchemaPath, schema, 'utf8');
+
+                    const schemaParams = [
+                        `--project ${config.projectId}`,
+                        `--space ${config.space}`,
+                        `--collection ${collection}`,
+                        `--schema "${tempSchemaPath}"`
+                    ].filter(Boolean).join(' ');
+
+                    const result = await executeCohoCommand(`add-schema ${schemaParams}`);
+
+                    return {
+                        content: [
+                            {
+                                type: "text",
+                                text: result
+                            }
+                        ],
+                        isError: false
+                    };
+                } finally {
+                    // Clean up temporary file
+                    try {
+                        await fs.unlink(tempSchemaPath);
+                    } catch (unlinkError) {
+                        // Ignore cleanup errors
+                        console.error('Failed to cleanup temp schema file:', unlinkError);
+                    }
+                }
             }
 
             case "remove_schema": {
@@ -893,7 +913,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                     `${cap}`,
                     capdelay ? `--capdelay ${capdelay}` : ''
                 ].filter(Boolean).join(' ');
-                const result = await executeCohoCommand(`cap ${capParams}`);
+                const result = await executeCohoCommand(`cap-collection ${capParams}`);
                 return {
                     content: [
                         {
@@ -912,7 +932,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                     `--space ${config.space}`,
                     `"${collection}"`
                 ].filter(Boolean).join(' ');
-                const result = await executeCohoCommand(`uncap ${uncapParams}`);
+                const result = await executeCohoCommand(`uncap-collection ${uncapParams}`);
                 return {
                     content: [
                         {
@@ -925,25 +945,54 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             }
 
             case "import": {
-                const { filepath, collection, separator, encoding } = args as ImportArgs;
-                const importParams = [
-                    `--project ${config.projectId}`,
-                    `--space ${config.space}`,
-                    `-f "${filepath}"`,
-                    `-c "${collection}"`,
-                    separator ? `--separator "${separator}"` : '',
-                    encoding ? `--encoding "${encoding}"` : ''
-                ].filter(Boolean).join(' ');
-                const result = await executeCohoCommand(`import ${importParams}`);
-                return {
-                    content: [
-                        {
-                            type: "text",
-                            text: result
+                const { filepath, content, collection, separator, encoding } = args as ImportArgs;
+
+                if (!filepath && !content) {
+                    throw new McpError(ErrorCode.InvalidRequest, "Either 'filepath' or 'content' must be provided for import.");
+                }
+
+                let actualFilePath = filepath;
+                let tempFile = false;
+
+                try {
+                    // If content is provided, create a temporary file
+                    if (content && !filepath) {
+                        actualFilePath = `/tmp/import_${Date.now()}.json`;
+                        await fs.writeFile(actualFilePath, content, 'utf8');
+                        tempFile = true;
+                    }
+
+                    const importParams = [
+                        `--project ${config.projectId}`,
+                        `--space ${config.space}`,
+                        `-f "${actualFilePath}"`,
+                        `-c "${collection}"`,
+                        separator ? `--separator "${separator}"` : '',
+                        encoding ? `--encoding "${encoding}"` : ''
+                    ].filter(Boolean).join(' ');
+
+                    const result = await executeCohoCommand(`import ${importParams}`);
+
+                    return {
+                        content: [
+                            {
+                                type: "text",
+                                text: result
+                            }
+                        ],
+                        isError: false
+                    };
+                } finally {
+                    // Clean up temporary file if created
+                    if (tempFile && actualFilePath) {
+                        try {
+                            await fs.unlink(actualFilePath);
+                        } catch (unlinkError) {
+                            // Ignore cleanup errors
+                            console.error('Failed to cleanup temp file:', unlinkError);
                         }
-                    ],
-                    isError: false
-                };
+                    }
+                }
             }
 
             case "export": {
