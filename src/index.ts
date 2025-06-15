@@ -48,7 +48,8 @@ const queryCollectionSchema = z.object({
     enqueue: z.string().optional(),
     pretty: z.boolean().optional(),
     reverse: z.boolean().optional(),
-    csv: z.boolean().optional()
+    csv: z.boolean().optional(),
+    jsonl: z.boolean().optional()
 });
 
 const deployCodeSchema = z.object({
@@ -126,6 +127,7 @@ const exportSchema = z.object({
     collection: z.string().describe("Collection to export"),
     filepath: z.string().optional().describe("File to save export data (optional, will return content if not specified)"),
     csv: z.boolean().optional().describe("Export to CSV format"),
+    jsonl: z.boolean().optional().describe("Export to JSONL format")
 });
 
 const kvGetSchema = z.object({
@@ -158,6 +160,12 @@ const docsSchema = z.object({
     topic: z.enum(["overview", "chatgpt-prompt", "workflow-api", "examples", "all"]).optional().default("overview").describe("Documentation topic to retrieve")
 });
 
+const collectionSchema = z.object({
+    project: z.string().optional().describe("Project name"),
+    json: z.boolean().optional().describe("JSON output format"),
+    sys: z.boolean().optional().describe("Show system collections")
+});
+
 // Add type inference
 type QueryCollectionArgs = z.infer<typeof queryCollectionSchema>;
 type DeployCodeArgs = z.infer<typeof deployCodeSchema>;
@@ -179,6 +187,7 @@ type KvSetArgs = z.infer<typeof kvSetSchema>;
 type KvDelArgs = z.infer<typeof kvDelSchema>;
 type LogArgs = z.infer<typeof logSchema>;
 type DocsArgs = z.infer<typeof docsSchema>;
+type CollectionArgs = z.infer<typeof collectionSchema>;
 
 // Tool definitions with JSON Schema for tools/list
 const tools = [
@@ -205,7 +214,8 @@ const tools = [
                 enqueue: { type: "string", description: "Add query result to queue topic" },
                 pretty: { type: "boolean", description: "Output data with formatting and colors" },
                 reverse: { type: "boolean", description: "Scan index in reverse order. Use with sort='_id' to get newest records first" },
-                csv: { type: "boolean", description: "Output data in CSV format" }
+                csv: { type: "boolean", description: "Output data in CSV format" },
+                jsonl: { type: "boolean", description: "Output data in JSONL format" }
             },
             required: ["collection"]
         }
@@ -401,7 +411,8 @@ const tools = [
             properties: {
                 collection: { type: "string", description: "Collection to export" },
                 filepath: { type: "string", description: "File to save export data (optional, will return content if not specified)" },
-                csv: { type: "boolean", description: "Export to CSV format" }
+                csv: { type: "boolean", description: "Export to CSV format" },
+                jsonl: { type: "boolean", description: "Export to JSONL format" }
             },
             required: ["collection"]
         }
@@ -475,6 +486,19 @@ const tools = [
                     default: "overview",
                     description: "Documentation topic to retrieve"
                 }
+            }
+        }
+    },
+    {
+        name: "collection",
+        description: "Show collections for space. Lists all collections available in the current space.",
+        schema: collectionSchema,
+        inputSchema: {
+            type: "object",
+            properties: {
+                project: { type: "string", description: "Project name" },
+                json: { type: "boolean", description: "JSON output format" },
+                sys: { type: "boolean", description: "Show system collections" }
             }
         }
     }
@@ -588,7 +612,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                     enqueue,
                     pretty = false,
                     reverse = false,
-                    csv = false
+                    csv = false,
+                    jsonl = false
                 } = args as QueryCollectionArgs;
 
                 console.error(`Querying collection: ${collection}`);
@@ -612,13 +637,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                     enqueue ? `--enqueue ${enqueue}` : '',
                     pretty ? '--pretty' : '',
                     reverse ? '--reverse' : '',
-                    csv ? '--csv' : ''
+                    csv ? '--csv' : '',
+                    jsonl ? '--jsonl' : ''
                 ].filter(Boolean).join(' ');
 
                 const result = await executeCohoCommand(`query ${queryParams}`);
 
-                // If the output is CSV or pretty format, return as is
-                if (csv || pretty) {
+                // If the output is CSV, JSONL or pretty format, return as is
+                if (csv || jsonl || pretty) {
                     return {
                         content: [
                             {
@@ -1120,13 +1146,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             }
 
             case "export": {
-                const { collection, filepath, csv } = args as ExportArgs;
+                const { collection, filepath, csv, jsonl } = args as ExportArgs;
                 const exportParams = [
                     `--project ${config.projectId}`,
                     `--space ${config.space}`,
                     `"${collection}"`,
                     filepath ? `-f "${filepath}"` : '',
-                    csv ? '--csv' : ''
+                    csv ? '--csv' : '',
+                    jsonl ? '--jsonl' : ''
                 ].filter(Boolean).join(' ');
                 const result = await executeCohoCommand(`export ${exportParams}`);
                 return {
@@ -1252,6 +1279,31 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                         {
                             type: "text",
                             text: content
+                        }
+                    ],
+                    isError: false
+                };
+            }
+
+            case "collection": {
+                const { project, json, sys } = args as CollectionArgs;
+
+                console.error(`Listing collections for space: ${config.space}`);
+
+                const collectionParams = [
+                    `--project ${project || config.projectId}`,
+                    `--space ${config.space}`,
+                    json ? '--json' : '',
+                    sys ? '--sys' : ''
+                ].filter(Boolean).join(' ');
+
+                const result = await executeCohoCommand(`collection ${collectionParams}`);
+
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: result
                         }
                     ],
                     isError: false
