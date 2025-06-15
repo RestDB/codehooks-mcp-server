@@ -47,3 +47,4 @@ tests/
 .eslintcache 
 run.sh
 test.sh
+mcp*.json

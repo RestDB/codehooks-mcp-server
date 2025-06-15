@@ -14,7 +14,7 @@
         "build": "tsc && node -e \"require('fs').chmodSync('build/index.js', '755')\"",
         "prepare": "npm run build",
         "watch": "tsc --watch",
-        "inspector": "npx @modelcontextprotocol/inspector build/index.js"
+        "inspector": "npm run build && npx @modelcontextprotocol/inspector --config mcp-dev.json --server codehooks-mcp"
     },
     "dependencies": {
         "@modelcontextprotocol/sdk": "1.11.0",
