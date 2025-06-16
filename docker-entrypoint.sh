@@ -17,5 +17,4 @@ if [ -z "$CODEHOOKS_SPACE" ]; then
     exit 1
 fi
 
-echo "Starting MCP server..."
 exec node build/index.js 
