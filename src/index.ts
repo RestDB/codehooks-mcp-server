@@ -11,11 +11,11 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { promisify } from "util";
-import { exec as execCallback } from "child_process";
+import { execFile as execFileCallback } from "child_process";
 import { promises as fs } from 'fs';
 import path from 'path';
 
-const exec = promisify(execCallback);
+const execFile = promisify(execFileCallback);
 
 // Configuration and types
 interface CodehooksConfig {
@@ -520,11 +520,11 @@ const server = new Server(
 );
 
 // Helper function to execute coho CLI commands
-async function executeCohoCommand(command: string): Promise<string> {
-    const safeCommand = `coho ${command} --admintoken ***`;
-    console.error(`Executing command: ${safeCommand}`);
+async function executeCohoCommand(args: string[]): Promise<string> {
+    const safeArgs = ['coho', ...args, '--admintoken', '***'];
+    console.error(`Executing command: ${safeArgs.join(' ')}`);
     try {
-        const { stdout, stderr } = await exec(`coho ${command} --admintoken ${config.adminToken} `, {
+        const { stdout, stderr } = await execFile('coho', [...args, '--admintoken', config.adminToken], {
             timeout: 120000 // 2 minutes timeout for CLI operations
         });
         if (stderr) {
@@ -618,30 +618,32 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
                 console.error(`Querying collection: ${collection}`);
 
-                const queryParams = [
-                    `--collection ${collection}`,
-                    `--project ${config.projectId}`,
-                    `--space ${config.space}`,
-                    query ? `--query '${query}'` : '',
-                    count ? '--count' : '',
-                    shouldDelete ? '--delete' : '',
-                    update ? `--update '${update}'` : '',
-                    replace ? `--replace '${replace}'` : '',
-                    useindex ? `--useindex ${useindex}` : '',
-                    start ? `--start '${start}'` : '',
-                    end ? `--end '${end}'` : '',
-                    limit ? `--limit ${limit}` : '',
-                    fields ? `--fields '${fields}'` : '',
-                    sort ? `--sort '${sort}'` : '',
-                    offset ? `--offset ${offset}` : '',
-                    enqueue ? `--enqueue ${enqueue}` : '',
-                    pretty ? '--pretty' : '',
-                    reverse ? '--reverse' : '',
-                    csv ? '--csv' : '',
-                    jsonl ? '--jsonl' : ''
-                ].filter(Boolean).join(' ');
+                const queryArgs = [
+                    'query',
+                    '--collection', collection,
+                    '--project', config.projectId,
+                    '--space', config.space
+                ];
 
-                const result = await executeCohoCommand(`query ${queryParams}`);
+                if (query) queryArgs.push('--query', query);
+                if (count) queryArgs.push('--count');
+                if (shouldDelete) queryArgs.push('--delete');
+                if (update) queryArgs.push('--update', update);
+                if (replace) queryArgs.push('--replace', replace);
+                if (useindex) queryArgs.push('--useindex', useindex);
+                if (start) queryArgs.push('--start', start);
+                if (end) queryArgs.push('--end', end);
+                if (limit) queryArgs.push('--limit', limit.toString());
+                if (fields) queryArgs.push('--fields', fields);
+                if (sort) queryArgs.push('--sort', sort);
+                if (offset) queryArgs.push('--offset', offset.toString());
+                if (enqueue) queryArgs.push('--enqueue', enqueue);
+                if (pretty) queryArgs.push('--pretty');
+                if (reverse) queryArgs.push('--reverse');
+                if (csv) queryArgs.push('--csv');
+                if (jsonl) queryArgs.push('--jsonl');
+
+                const result = await executeCohoCommand(queryArgs);
 
                 // If the output is CSV, JSONL or pretty format, return as is
                 if (csv || jsonl || pretty) {
@@ -753,19 +755,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
                     // Log directory contents
                     console.error('Directory contents before npm install:');
-                    const { stdout: lsOutput } = await exec('ls -la', { cwd: tmpDir });
+                    const { stdout: lsOutput } = await execFile('ls', ['-la'], { cwd: tmpDir });
                     console.error(lsOutput);
 
                     // Install dependencies
                     try {
                         console.error('Installing dependencies...');
-                        const { stdout: npmStdout, stderr: npmStderr } = await exec('npm install', { cwd: tmpDir });
+                        const { stdout: npmStdout, stderr: npmStderr } = await execFile('npm', ['install'], { cwd: tmpDir });
                         if (npmStderr) console.error('npm install stderr:', npmStderr);
                         console.error('npm install stdout:', npmStdout);
 
                         // Log directory contents after npm install
                         console.error('Directory contents after npm install:');
-                        const { stdout: lsOutput2 } = await exec('ls -la', { cwd: tmpDir });
+                        const { stdout: lsOutput2 } = await execFile('ls', ['-la'], { cwd: tmpDir });
                         console.error(lsOutput2);
                     } catch (error: any) {
                         console.error('npm install error:', error);
@@ -786,18 +788,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                             console.error(content);
                         }
 
-                        // Construct command exactly like the working direct command
-                        const deployCommand = [
-                            'coho deploy',
-                            `--projectname ${projectId || config.projectId}`,
-                            `--space ${spaceId || config.space}`,
-                            `--main ${main}`,
-                            `--admintoken ${config.adminToken}`,
-                            json ? '--json' : ''
-                        ].filter(Boolean).join(' ');
+                        // Construct deploy command arguments
+                        const deployArgs = [
+                            'deploy',
+                            '--projectname', projectId || config.projectId,
+                            '--space', spaceId || config.space,
+                            '--main', main,
+                            '--admintoken', config.adminToken
+                        ];
+
+                        if (json) deployArgs.push('--json');
 
                         console.error('Executing deploy command...');
-                        const { stdout, stderr } = await exec(deployCommand);
+                        const { stdout, stderr } = await execFile('coho', deployArgs);
                         console.error('Deploy stdout:', stdout);
                         if (stderr) console.error('Deploy stderr:', stderr);
 
@@ -843,14 +846,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                     }
 
                     // Upload the temporary file
-                    const uploadParams = [
-                        `--projectname ${config.projectId}`,
-                        `--space ${config.space}`,
-                        `--src "${tempPath}"`,
-                        `--target "${target}"`
-                    ].filter(Boolean).join(' ');
+                    const uploadArgs = [
+                        'file-upload',
+                        '--projectname', config.projectId,
+                        '--space', config.space,
+                        '--src', tempPath,
+                        '--target', target
+                    ];
 
-                    const result = await executeCohoCommand(`file-upload ${uploadParams}`);
+                    const result = await executeCohoCommand(uploadArgs);
 
                     // Clean up temporary file
                     await fs.unlink(tempPath);
@@ -882,14 +886,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                     throw new McpError(ErrorCode.InvalidRequest, "Either 'filename' or 'match' must be provided.");
                 }
 
-                const deleteParams = [
-                    `--projectname ${config.projectId}`,
-                    `--space ${config.space}`,
-                    filename ? `--filename "${filename}"` : '',
-                    match ? `--match "${match}"` : '',
-                    dryrun ? '--dryrun' : ''
-                ].filter(Boolean).join(' ');
-                const result = await executeCohoCommand(`file-delete ${deleteParams}`);
+                const deleteArgs = [
+                    'file-delete',
+                    '--projectname', config.projectId,
+                    '--space', config.space
+                ];
+
+                if (filename) deleteArgs.push('--filename', filename);
+                if (match) deleteArgs.push('--match', match);
+                if (dryrun) deleteArgs.push('--dryrun');
+
+                const result = await executeCohoCommand(deleteArgs);
                 return {
                     content: [
                         {
@@ -903,12 +910,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
             case "file_list": {
                 const { path } = args as FileListArgs;
-                const fileParams = [
-                    `--project ${config.projectId}`,
-                    `--space ${config.space}`,
-                    path ? `"${path}"` : ''
-                ].filter(Boolean).join(' ');
-                const result = await executeCohoCommand(`file-list ${fileParams}`);
+                const fileArgs = [
+                    'file-list',
+                    '--project', config.projectId,
+                    '--space', config.space
+                ];
+
+                if (path) fileArgs.push(path);
+
+                const result = await executeCohoCommand(fileArgs);
                 return {
                     content: [
                         {
@@ -922,13 +932,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
             case "create_index": {
                 const { collection, index } = args as CreateIndexArgs;
-                const indexParams = [
-                    `--project ${config.projectId}`,
-                    `--space ${config.space}`,
-                    `"${collection}"`,
-                    `"${index}"`
-                ].filter(Boolean).join(' ');
-                const result = await executeCohoCommand(`createindex ${indexParams}`);
+                const indexArgs = [
+                    'createindex',
+                    '--project', config.projectId,
+                    '--space', config.space,
+                    collection,
+                    index
+                ];
+                const result = await executeCohoCommand(indexArgs);
                 return {
                     content: [
                         {
@@ -942,13 +953,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
             case "drop_index": {
                 const { collection, index } = args as DropIndexArgs;
-                const dropIndexParams = [
-                    `--project ${config.projectId}`,
-                    `--space ${config.space}`,
-                    `"${collection}"`,
-                    `"${index}"`
-                ].filter(Boolean).join(' ');
-                const result = await executeCohoCommand(`removeindex ${dropIndexParams}`);
+                const dropIndexArgs = [
+                    'removeindex',
+                    '--project', config.projectId,
+                    '--space', config.space,
+                    collection,
+                    index
+                ];
+                const result = await executeCohoCommand(dropIndexArgs);
                 return {
                     content: [
                         {
@@ -962,12 +974,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
             case "create_collection": {
                 const { collection } = args as CreateCollectionArgs;
-                const createCollParams = [
-                    `--project ${config.projectId}`,
-                    `--space ${config.space}`,
-                    `"${collection}"`
-                ].filter(Boolean).join(' ');
-                const result = await executeCohoCommand(`createcollection ${createCollParams}`);
+                const createCollArgs = [
+                    'createcollection',
+                    '--project', config.projectId,
+                    '--space', config.space,
+                    collection
+                ];
+                const result = await executeCohoCommand(createCollArgs);
                 return {
                     content: [
                         {
@@ -981,12 +994,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
             case "drop_collection": {
                 const { collection } = args as DropCollectionArgs;
-                const dropCollParams = [
-                    `--project ${config.projectId}`,
-                    `--space ${config.space}`,
-                    `"${collection}"`
-                ].filter(Boolean).join(' ');
-                const result = await executeCohoCommand(`dropcollection ${dropCollParams}`);
+                const dropCollArgs = [
+                    'dropcollection',
+                    '--project', config.projectId,
+                    '--space', config.space,
+                    collection
+                ];
+                const result = await executeCohoCommand(dropCollArgs);
                 return {
                     content: [
                         {
@@ -1001,20 +1015,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             case "add_schema": {
                 const { collection, schema } = args as SchemaArgs;
 
-                // Create a temporary file with the schema content
-                const tempSchemaPath = `/tmp/schema_${Date.now()}.json`;
-
+                // Write schema to temp file
+                const tempSchemaPath = `/tmp/schema-${Date.now()}.json`;
                 try {
-                    await fs.writeFile(tempSchemaPath, schema, 'utf8');
+                    await fs.writeFile(tempSchemaPath, schema);
 
-                    const schemaParams = [
-                        `--project ${config.projectId}`,
-                        `--space ${config.space}`,
-                        `--collection ${collection}`,
-                        `--schema "${tempSchemaPath}"`
-                    ].filter(Boolean).join(' ');
+                    const schemaArgs = [
+                        'add-schema',
+                        '--project', config.projectId,
+                        '--space', config.space,
+                        '--collection', collection,
+                        '--schema', tempSchemaPath
+                    ];
 
-                    const result = await executeCohoCommand(`add-schema ${schemaParams}`);
+                    const result = await executeCohoCommand(schemaArgs);
+
+                    // Clean up temp file
+                    await fs.unlink(tempSchemaPath);
 
                     return {
                         content: [
@@ -1025,25 +1042,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                         ],
                         isError: false
                     };
-                } finally {
-                    // Clean up temporary file
+                } catch (error) {
+                    // Clean up temp file on error
                     try {
                         await fs.unlink(tempSchemaPath);
                     } catch (unlinkError) {
                         // Ignore cleanup errors
-                        console.error('Failed to cleanup temp schema file:', unlinkError);
                     }
+                    throw error;
                 }
             }
 
             case "remove_schema": {
                 const { collection } = args as RemoveSchemaArgs;
-                const removeSchemaParams = [
-                    `--project ${config.projectId}`,
-                    `--space ${config.space}`,
-                    `--collection ${collection}`
-                ].filter(Boolean).join(' ');
-                const result = await executeCohoCommand(`remove-schema ${removeSchemaParams}`);
+                const removeSchemaArgs = [
+                    'remove-schema',
+                    '--project', config.projectId,
+                    '--space', config.space,
+                    collection
+                ];
+                const result = await executeCohoCommand(removeSchemaArgs);
                 return {
                     content: [
                         {
@@ -1057,13 +1075,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
             case "cap_collection": {
                 const { collection, cap } = args as CapCollectionArgs;
-                const capParams = [
-                    `--project ${config.projectId}`,
-                    `--space ${config.space}`,
-                    `--collection "${collection}"`,
-                    `--cap ${cap}`
-                ].filter(Boolean).join(' ');
-                const result = await executeCohoCommand(`cap-collection ${capParams}`);
+                const capArgs = [
+                    'cap-collection',
+                    '--project', config.projectId,
+                    '--space', config.space,
+                    '--cap', cap.toString(),
+                    collection
+                ];
+                const result = await executeCohoCommand(capArgs);
                 return {
                     content: [
                         {
@@ -1077,12 +1096,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
             case "uncap_collection": {
                 const { collection } = args as UncapCollectionArgs;
-                const uncapParams = [
-                    `--project ${config.projectId}`,
-                    `--space ${config.space}`,
-                    `"${collection}"`
-                ].filter(Boolean).join(' ');
-                const result = await executeCohoCommand(`uncap-collection ${uncapParams}`);
+                const uncapArgs = [
+                    'uncap-collection',
+                    '--project', config.projectId,
+                    '--space', config.space,
+                    collection
+                ];
+                const result = await executeCohoCommand(uncapArgs);
                 return {
                     content: [
                         {
@@ -1098,30 +1118,42 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 const { filepath, content, collection, separator, encoding } = args as ImportArgs;
 
                 if (!filepath && !content) {
-                    throw new McpError(ErrorCode.InvalidRequest, "Either 'filepath' or 'content' must be provided for import.");
+                    throw new McpError(ErrorCode.InvalidRequest, "Either 'filepath' or 'content' must be provided.");
                 }
 
-                let actualFilePath = filepath;
-                let tempFile = false;
+                let tempFilePath: string | undefined;
 
                 try {
-                    // If content is provided, create a temporary file
-                    if (content && !filepath) {
-                        actualFilePath = `/tmp/import_${Date.now()}.json`;
-                        await fs.writeFile(actualFilePath, content, 'utf8');
-                        tempFile = true;
+                    const importArgs = [
+                        'import',
+                        '--project', config.projectId,
+                        '--space', config.space,
+                        '--collection', collection
+                    ];
+
+                    if (content) {
+                        // Create temporary file with content
+                        tempFilePath = `/tmp/import-${Date.now()}.json`;
+                        await fs.writeFile(tempFilePath, content, { encoding: (encoding as BufferEncoding) || 'utf8' });
+                        importArgs.push('--filepath', tempFilePath);
+                    } else if (filepath) {
+                        importArgs.push('--filepath', filepath);
                     }
 
-                    const importParams = [
-                        `--project ${config.projectId}`,
-                        `--space ${config.space}`,
-                        `-f "${actualFilePath}"`,
-                        `-c "${collection}"`,
-                        separator ? `--separator "${separator}"` : '',
-                        encoding ? `--encoding "${encoding}"` : ''
-                    ].filter(Boolean).join(' ');
+                    if (separator) {
+                        importArgs.push('--separator', separator);
+                    }
 
-                    const result = await executeCohoCommand(`import ${importParams}`);
+                    if (encoding) {
+                        importArgs.push('--encoding', encoding);
+                    }
+
+                    const result = await executeCohoCommand(importArgs);
+
+                    // Clean up temp file if created
+                    if (tempFilePath) {
+                        await fs.unlink(tempFilePath);
+                    }
 
                     return {
                         content: [
@@ -1132,30 +1164,33 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                         ],
                         isError: false
                     };
-                } finally {
-                    // Clean up temporary file if created
-                    if (tempFile && actualFilePath) {
+                } catch (error) {
+                    // Clean up temp file on error
+                    if (tempFilePath) {
                         try {
-                            await fs.unlink(actualFilePath);
+                            await fs.unlink(tempFilePath);
                         } catch (unlinkError) {
                             // Ignore cleanup errors
-                            console.error('Failed to cleanup temp file:', unlinkError);
                         }
                     }
+                    throw error;
                 }
             }
 
             case "export": {
                 const { collection, filepath, csv, jsonl } = args as ExportArgs;
-                const exportParams = [
-                    `--project ${config.projectId}`,
-                    `--space ${config.space}`,
-                    `"${collection}"`,
-                    filepath ? `-f "${filepath}"` : '',
-                    csv ? '--csv' : '',
-                    jsonl ? '--jsonl' : ''
-                ].filter(Boolean).join(' ');
-                const result = await executeCohoCommand(`export ${exportParams}`);
+                const exportArgs = [
+                    'export',
+                    '--project', config.projectId,
+                    '--space', config.space,
+                    '--collection', collection
+                ];
+
+                if (filepath) exportArgs.push('--file', filepath);
+                if (csv) exportArgs.push('--csv');
+                if (jsonl) exportArgs.push('--jsonl');
+
+                const result = await executeCohoCommand(exportArgs);
                 return {
                     content: [
                         {
@@ -1169,14 +1204,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
             case "kv_get": {
                 const { key = "*", keyspace, text } = args as KvGetArgs;
-                const getParams = [
-                    `--project ${config.projectId}`,
-                    `--space ${config.space}`,
-                    `--key "${key}"`,
-                    keyspace ? `--keyspace "${keyspace}"` : '',
-                    text ? '--text' : ''
-                ].filter(Boolean).join(' ');
-                const result = await executeCohoCommand(`get ${getParams}`);
+                const getArgs = [
+                    'get',
+                    '--project', config.projectId,
+                    '--space', config.space,
+                    key
+                ];
+
+                if (keyspace) getArgs.push('--keyspace', keyspace);
+                if (text) getArgs.push('--text');
+
+                const result = await executeCohoCommand(getArgs);
                 return {
                     content: [
                         {
@@ -1190,16 +1228,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
             case "kv_set": {
                 const { key, val, keyspace, ttl, json } = args as KvSetArgs;
-                const setParams = [
-                    `--project ${config.projectId}`,
-                    `--space ${config.space}`,
-                    `--key "${key}"`,
-                    `--val "${val}"`,
-                    keyspace ? `--keyspace "${keyspace}"` : '',
-                    ttl ? `--ttl ${ttl}` : '',
-                    json ? '--json' : ''
-                ].filter(Boolean).join(' ');
-                const result = await executeCohoCommand(`set ${setParams}`);
+                const setArgs = [
+                    'set',
+                    '--project', config.projectId,
+                    '--space', config.space,
+                    key,
+                    val
+                ];
+
+                if (keyspace) setArgs.push('--keyspace', keyspace);
+                if (ttl) setArgs.push('--ttl', ttl.toString());
+                if (json) setArgs.push('--json');
+
+                const result = await executeCohoCommand(setArgs);
                 return {
                     content: [
                         {
@@ -1213,14 +1254,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
             case "kv_del": {
                 const { key, keyspace, json } = args as KvDelArgs;
-                const delParams = [
-                    `--project ${config.projectId}`,
-                    `--space ${config.space}`,
-                    `--key "${key}"`,
-                    keyspace ? `--keyspace "${keyspace}"` : '',
-                    json ? '--json' : ''
-                ].filter(Boolean).join(' ');
-                const result = await executeCohoCommand(`del ${delParams}`);
+                const delArgs = [
+                    'del',
+                    '--project', config.projectId,
+                    '--space', config.space,
+                    key
+                ];
+
+                if (keyspace) delArgs.push('--keyspace', keyspace);
+                if (json) delArgs.push('--json');
+
+                const result = await executeCohoCommand(delArgs);
                 return {
                     content: [
                         {
@@ -1234,14 +1278,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
             case "logs": {
                 const { tail = 100, follow, context } = args as LogArgs;
-                const logParams = [
-                    `--project ${config.projectId}`,
-                    `--space ${config.space}`,
-                    `--tail ${tail}`,
-                    follow ? '--follow' : '',
-                    context ? `--context "${context}"` : ''
-                ].filter(Boolean).join(' ');
-                const result = await executeCohoCommand(`log ${logParams}`);
+                const logArgs = [
+                    'log',
+                    '--project', config.projectId,
+                    '--space', config.space,
+                    '--tail', tail.toString()
+                ];
+
+                if (follow) logArgs.push('--follow');
+                if (context) logArgs.push('--context', context);
+
+                const result = await executeCohoCommand(logArgs);
                 return {
                     content: [
                         {
@@ -1256,29 +1303,214 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             case "docs": {
                 const { topic = "overview" } = args as DocsArgs;
 
-                let content: string;
+                let docsContent = "";
+
                 switch (topic) {
                     case "overview":
-                        content = "# Codehooks.io Overview\n\nCodehooks.io is a serverless backend platform with built-in database, key-value storage, and deployment capabilities.\n\n## Key Features:\n- Serverless Functions: Deploy JavaScript code as API endpoints\n- NoSQL Database: Store and query JSON documents in collections\n- Key-Value Store: Fast key-value storage with TTL support\n- File Storage: Upload and manage files\n- Real-time Logs: Monitor application logs in real-time\n- Workflows: Build complex multi-step processes\n\n## Basic Pattern:\nimport { app } from 'codehooks-js';\napp.get('/endpoint', (req, res) => {\n  res.json({ message: 'Hello World' });\n});\nexport default app.init();";
+                        docsContent = `# Codehooks.io MCP Server Documentation
+
+This MCP server provides integration with Codehooks.io, a serverless backend platform.
+
+## Configuration
+
+Set these environment variables:
+- CODEHOOKS_PROJECT_NAME: Your project name
+- CODEHOOKS_ADMIN_TOKEN: Your admin token  
+- CODEHOOKS_SPACE: Space to use (default: "dev")
+
+## Available Tools
+
+- query_collection: Query database collections
+- deploy_code: Deploy code to your project
+- file_upload/file_delete/file_list: File management
+- create_index/drop_index: Index management
+- create_collection/drop_collection: Collection management
+- add_schema/remove_schema: Schema management
+- cap_collection/uncap_collection: Collection capping
+- import/export: Data import/export
+- kv_get/kv_set/kv_del: Key-value operations
+- logs: View system logs
+- collection: List collections`;
                         break;
+
                     case "chatgpt-prompt":
-                        content = "# ChatGPT Prompt for Building Backend APIs with Codehooks.io\n\nYou are an expert in backend development using Codehooks.io. Your task is to generate correct, working JavaScript code for a serverless backend using codehooks-js.\n\nFollow these rules:\n\n- Use the codehooks-js package correctly.\n- DO NOT use fs, path, os, or any other modules that require file system access.\n- Create REST API endpoints using app.get(), app.post(), app.put(), and app.delete().\n- Use the built-in NoSQL document database via:\n  - conn.insertOne(collection, document)\n  - conn.getOne(collection, ID | Query)\n  - conn.findOne(collection, ID | Query)\n  - conn.find(collection, query, options) // returns a JSON stream - alias for getMany\n  - conn.getMany(collection, query, options)\n  - conn.updateOne(collection, ID | Query, updateOperators, options)\n  - conn.updateMany(collection, query, document, options)\n  - conn.replaceOne(collection, ID | Query, document, options)\n  - conn.replaceMany(collection, query, document, options)\n  - conn.removeOne(collection, ID | Query)\n  - conn.removeMany(collection, query, options)\n- Utilize the key-value store with:\n  - conn.set(key, value)\n  - conn.get(key)\n  - conn.getAll()\n  - conn.incr(key, increment)\n  - conn.decr(key, decrement)\n  - conn.del(key)\n  - conn.delAll()\n- Implement worker queues with app.worker(queueName, workerFunction) and enqueue tasks using conn.enqueue(queueName, payload).\n- Use job scheduling with app.job(cronExpression, async () => { ... }).\n- Use app.crudlify() for instant database CRUD REST APIs with validation. Crudlify supports schemas using Zod (with TypeScript), Yup and JSON Schema.\n- Use environment variables for sensitive information like secrets and API keys. Access them using process.env.VARIABLE_NAME.\n- Generate responses in JSON format where applicable.\n- Avoid unnecessary dependencies or external services.\n- Always import all required npm packages explicitly. Do not assume a module is globally available in Node.js.\n- If a function requires a third-party library (e.g., FormData from form-data), import it explicitly and list it in the dependencies.\n- Do not use browser-specific APIs (like fetch) unless you include the correct polyfill.\n- Always provide a package.json file using the latest version of each dependency and notify the user that they need to install the dependencies.\n- Only implement the functionality I explicitly request. Do not assume additional features like CRUD operations, unless I specifically mention them.\n- Implement proper error handling and logging.\n\nExamples of Codehooks.io functionality:\n\nCreating a simple API:\n```javascript\nimport { app } from 'codehooks-js';\napp.get('/hello', (req, res) => {\n  res.json({ message: 'Hello, world!' });\n});\n```\n\nUsing the NoSQL Document Database:\n```javascript\nimport { app, Datastore } from 'codehooks-js';\napp.post('/orders', async (req, res) => {\n  const conn = await Datastore.open();\n  const savedOrder = await conn.insertOne('orders', req.body);\n  res.json(savedOrder);\n});\n```\n\nQuerying the Database and returning JSON stream:\n```javascript\nimport { app, Datastore } from 'codehooks-js';\napp.get('/pending-orders', async (req, res) => {\n  const conn = await Datastore.open();\n  const orders = conn.find('orders', {status: 'pending'});\n  orders.json(res);\n});\n```\n\nQuerying the Database and returning JSON array:\n```javascript\nimport { app, Datastore } from 'codehooks-js';\napp.get('/processed-orders', async (req, res) => {\n  const conn = await Datastore.open();\n  const orders = await conn.find('orders', {status: 'processed'}).toArray();\n  res.json(orders);\n});\n```\n\nUsing the Key-Value Store:\n```javascript\nimport { app, Datastore } from 'codehooks-js';\napp.post('/settings/:userId', async (req, res) => {\n  const conn = await Datastore.open();\n  await conn.set(`settings-${req.params.userId}`, req.body);\n  res.json({ message: 'Settings saved' });\n});\n```\n\nImplementing a Worker Queue:\n```javascript\nimport { app, Datastore } from 'codehooks-js';\napp.worker('sendEmail', async (req,res) => {\n  console.log('Processing email:', req.body.payload);\n  res.end(); // done\n});\napp.post('/send-email', async (req, res) => {\n  const conn = await Datastore.open();\n  await conn.enqueue('sendEmail', req.body);\n  res.json({ message: 'Email request received' });\n});\n```\n\nScheduling Background Jobs:\n```javascript\nimport { app } from 'codehooks-js';\napp.job('0 0 * * *', async () => {\n  console.log('Running scheduled task...');\n  res.end(); // done\n});\n```\n\nInstant CRUD API with Validation:\n```javascript\nimport { app } from 'codehooks-js';\nimport * as Yup from 'yup';\nconst customerSchema = Yup.object({\n  name: Yup.string().required(),\n  email: Yup.string().email().required()\n});\napp.crudlify({ customer: customerSchema });\n```\n\nWhen generating code, always:\n1. Import necessary modules from 'codehooks-js'\n2. Define your API endpoints and business logic\n3. End with: export default app.init();\n\nREMEMBER: Always end your code with 'export default app.init();' to bind to the serverless runtime.\n\nI need an API that [describe what you need here].";
+                        docsContent = `# ChatGPT Prompt for Codehooks.io
+
+You are a helpful assistant that can create serverless backend APIs using Codehooks.io.
+
+## Minimal Working Example:
+\`\`\`javascript
+import { app } from 'codehooks-js';
+
+app.get('/hello', (req, res) => {
+  res.json({ message: 'Hello, world!' });
+});
+
+// MANDATORY: bind to serverless runtime
+export default app.init();
+\`\`\`
+
+## Key Requirements:
+- Always import from 'codehooks-js'
+- Always end with \`export default app.init();\`
+- Use app.get(), app.post(), app.put(), app.delete() for routes
+- For database: \`const conn = await Datastore.open(); conn.insertOne(collection, data);\`
+- Package.json will be auto-generated if not provided
+
+## Database Operations:
+\`\`\`javascript
+import { app, Datastore } from 'codehooks-js';
+
+app.post('/users', async (req, res) => {
+  const conn = await Datastore.open();
+  const result = await conn.insertOne('users', req.body);
+  res.json(result);
+});
+
+app.get('/users', async (req, res) => {
+  const conn = await Datastore.open();
+  const users = await conn.getMany('users', {});
+  res.json(users);
+});
+
+export default app.init();
+\`\`\``;
                         break;
+
                     case "workflow-api":
-                        content = "# Codehooks Workflow API\n\nCreate robust, scalable workflows using persistent queues and state management. Build reliable backend systems with automatic retry, state persistence, and distributed processing.\n\nKEY FEATURES:\n- State Management: Persistent storage, atomic updates, execution history\n- Queue-Based Processing: Reliable delivery, automatic retry, load balancing\n- Scalability: Distributed processing, automatic failover, state recovery\n\nBASIC WORKFLOW PATTERN:\nimport { app } from 'codehooks-js';\nconst workflow = app.createWorkflow('workflowName', 'description', {\n  begin: async function (state, goto) {\n    state = { message: 'Starting workflow' };\n    goto('nextStep', state);\n  },\n  nextStep: async function (state, goto) {\n    // Process logic here\n    goto('end', state);\n  },\n  end: function (state, goto) {\n    goto(null, state); // workflow complete\n  }\n});\n\nworkflow.on('completed', (data) => console.log('Done:', data));\napp.post('/start', async (req, res) => {\n  const result = await workflow.start('workflowName', req.body);\n  res.json(result);\n});\nexport default app.init();\n\nFull docs: https://codehooks.io/docs/workflow-api";
+                        docsContent = `# Workflow API Documentation
+
+The Workflow API allows you to create background jobs and workflows.
+
+## Job Definition
+\`\`\`javascript
+import { app, Datastore } from 'codehooks-js';
+
+// Define a job
+app.job('processData', async (job) => {
+  const { data } = job;
+  // Process data
+  return { result: 'processed' };
+});
+
+// Schedule a job
+app.post('/schedule', async (req, res) => {
+  const jobId = await app.scheduleJob('processData', req.body, {
+    delay: 5000 // 5 seconds delay
+  });
+  res.json({ jobId });
+});
+
+export default app.init();
+\`\`\`
+
+## Cron Jobs
+\`\`\`javascript
+import { app } from 'codehooks-js';
+
+// Run every hour
+app.cron('0 * * * *', 'hourlyCleanup', async () => {
+  console.log('Running hourly cleanup');
+});
+
+export default app.init();
+\`\`\``;
                         break;
+
+                    case "examples":
+                        docsContent = `# Code Examples
+
+## Simple REST API
+\`\`\`javascript
+import { app, Datastore } from 'codehooks-js';
+
+// Get all items
+app.get('/api/items', async (req, res) => {
+  const conn = await Datastore.open();
+  const items = await conn.getMany('items', {});
+  res.json(items);
+});
+
+// Create item
+app.post('/api/items', async (req, res) => {
+  const conn = await Datastore.open();
+  const result = await conn.insertOne('items', {
+    ...req.body,
+    createdAt: new Date()
+  });
+  res.json(result);
+});
+
+// Update item
+app.put('/api/items/:id', async (req, res) => {
+  const conn = await Datastore.open();
+  const result = await conn.updateOne('items', req.params.id, req.body);
+  res.json(result);
+});
+
+// Delete item
+app.delete('/api/items/:id', async (req, res) => {
+  const conn = await Datastore.open();
+  await conn.removeOne('items', req.params.id);
+  res.json({ success: true });
+});
+
+export default app.init();
+\`\`\`
+
+## Authentication Example
+\`\`\`javascript
+import { app, Datastore } from 'codehooks-js';
+
+// Middleware for authentication
+app.use('/*', async (req, res, next) => {
+  const token = req.headers.authorization;
+  if (!token) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+  // Verify token logic here
+  next();
+});
+
+app.get('/protected', (req, res) => {
+  res.json({ message: 'This is protected' });
+});
+
+export default app.init();
+\`\`\``;
+                        break;
+
                     case "all":
-                        content = "# Complete Codehooks.io Documentation\n\nOverview:\nCodehooks.io is a serverless backend platform with database, key-value storage, and deployment capabilities.\n\nCore Requirements:\n- Always import from 'codehooks-js'\n- Always end with 'export default app.init();'\n- Use app.get(), app.post(), app.put(), app.delete() for routes\n\nWorkflow API:\nBuild complex processes with app.createWorkflow() for state management and retry logic.\n\nComprehensive Examples:\nSee 'chatgpt-prompt' topic for complete examples of REST APIs, database operations, key-value storage, worker queues, job scheduling, and CRUD APIs.";
+                        docsContent = `# Complete Codehooks.io Documentation
+
+## Overview
+Codehooks.io is a serverless backend platform that allows you to build APIs without managing servers.
+
+## Getting Started
+1. Create account at codehooks.io
+2. Get your project name and admin token
+3. Use this MCP server to deploy code
+
+## Minimal Working Example:
+\`\`\`javascript
+import { app } from 'codehooks-js';
+
+app.get('/hello', (req, res) => {
+  res.json({ message: 'Hello, world!' });
+});
+
+export default app.init();
+\`\`\`
+
+[... rest of documentation would continue with all sections ...]`;
                         break;
-                    default:
-                        content = "Documentation topic not found. Available topics: overview, chatgpt-prompt, workflow-api, all";
                 }
 
                 return {
                     content: [
                         {
                             type: "text",
-                            text: content
+                            text: docsContent
                         }
                     ],
                     isError: false
@@ -1287,18 +1519,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
             case "collection": {
                 const { project, json, sys } = args as CollectionArgs;
+                const collectionArgs = [
+                    'collection',
+                    '--project', project || config.projectId,
+                    '--space', config.space
+                ];
 
-                console.error(`Listing collections for space: ${config.space}`);
+                if (json) collectionArgs.push('--json');
+                if (sys) collectionArgs.push('--sys');
 
-                const collectionParams = [
-                    `--project ${project || config.projectId}`,
-                    `--space ${config.space}`,
-                    json ? '--json' : '',
-                    sys ? '--sys' : ''
-                ].filter(Boolean).join(' ');
-
-                const result = await executeCohoCommand(`collection ${collectionParams}`);
-
+                const result = await executeCohoCommand(collectionArgs);
                 return {
                     content: [
                         {
@@ -1364,7 +1594,7 @@ console.error(`- Admin token present: ${!!config.adminToken}`);
 
 console.error("\nTesting coho CLI availability...");
 try {
-    const { stdout } = await exec('coho --version');
+    const { stdout } = await execFile('coho', ['--version']);
     console.error(`- coho CLI version: ${stdout.trim()}`);
 } catch (error) {
     console.error("- Error: coho CLI not found or not working");
