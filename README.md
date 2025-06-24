@@ -201,3 +201,13 @@ Replace `username` with your actual username.
 4. **Store backup metadata** in key-value store for tracking and management
 
 Each example demonstrates how multiple MCP tools work together to create complete, production-ready systems through natural conversation with your AI agent.
+
+## Security Researchers
+
+We thank the following individuals for responsible disclosure and helping improve the security of this project:
+
+- [Liran Tal](https://lirantal.com) – Reported a command injection vulnerability in the `query_collection` tool (May 2025)
+
+## License
+
+This project is licensed under the MIT License.
