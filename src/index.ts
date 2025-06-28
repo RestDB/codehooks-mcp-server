@@ -46,7 +46,6 @@ const queryCollectionSchema = z.object({
     sort: z.string().optional(),
     offset: z.number().optional(),
     enqueue: z.string().optional(),
-    pretty: z.boolean().optional(),
     reverse: z.boolean().optional(),
     csv: z.boolean().optional(),
     jsonl: z.boolean().optional()
@@ -212,7 +211,6 @@ const tools = [
                 sort: { type: "string", description: "Comma separated list of fields to sort by. Use '_id' to sort by creation time" },
                 offset: { type: "number", description: "Skip items before returning data in query result" },
                 enqueue: { type: "string", description: "Add query result to queue topic" },
-                pretty: { type: "boolean", description: "Output data with formatting and colors" },
                 reverse: { type: "boolean", description: "Scan index in reverse order. Use with sort='_id' to get newest records first" },
                 csv: { type: "boolean", description: "Output data in CSV format" },
                 jsonl: { type: "boolean", description: "Output data in JSONL format" }
@@ -222,7 +220,7 @@ const tools = [
     },
     {
         name: "deploy_code",
-        description: "Deploy JavaScript code to Codehooks.io project. \n\nMINIMAL WORKING EXAMPLE:\n```javascript\nimport { app } from 'codehooks-js';\n\napp.get('/hello', (req, res) => {\n  res.json({ message: 'Hello, world!' });\n});\n\n// MANDATORY: bind to serverless runtime\nexport default app.init();\n```\n\nKEY REQUIREMENTS:\n- Always import from 'codehooks-js'\n- Always end with `export default app.init();`\n- Use app.get(), app.post(), app.put(), app.delete() for routes\n- For database: `const conn = await Datastore.open(); conn.insertOne(collection, data);`\n- Package.json will be auto-generated if not provided\n\nDOCUMENTATION:\n- Use 'docs' tool with topics: 'chatgpt-prompt', 'workflow-api' \n- Online ChatGPT prompt: https://codehooks.io/docs/chatgpt-backend-api-prompt\n- Online Workflow API: https://codehooks.io/docs/workflow-api\n\nNote: Codehooks.io has CORS built-in by default, so no additional CORS middleware is needed.",
+        description: "Deploy JavaScript code to Codehooks.io project. \n\nMINIMAL WORKING EXAMPLE:\n```javascript\nimport { app } from 'codehooks-js';\n\napp.get('/hello', (req, res) => {\n  res.json({ message: 'Hello, world!' });\n});\n\n// MANDATORY: bind to serverless runtime\nexport default app.init();\n```\n\nINSTANT CRUD BACKEND:\n```javascript\nimport { app } from 'codehooks-js';\n\n// Creates complete CRUD API for any collection (no schema required)\napp.crudlify();\n\nexport default app.init();\n```\n\nKEY REQUIREMENTS:\n- Always import from 'codehooks-js'\n- Always end with `export default app.init();`\n- Use app.get(), app.post(), app.put(), app.delete() for routes\n- For database: `const conn = await Datastore.open(); conn.insertOne(collection, data);`\n- Use app.crudlify() to create complete CRUD backend with no schema required\n- Package.json will be auto-generated if not provided\n\nDOCUMENTATION:\n- Use 'docs' tool with topics: 'chatgpt-prompt', 'workflow-api' \n- Online ChatGPT prompt: https://codehooks.io/docs/chatgpt-backend-api-prompt\n- Online Workflow API: https://codehooks.io/docs/workflow-api\n- LLM-optimized docs: https://codehooks.io/llms.txt and https://codehooks.io/llms-full.txt\n\nNote: Codehooks.io has CORS built-in by default, so no additional CORS middleware is needed.",
         schema: deployCodeSchema,
         inputSchema: {
             type: "object",
@@ -610,7 +608,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                     sort,
                     offset,
                     enqueue,
-                    pretty = false,
                     reverse = false,
                     csv = false,
                     jsonl = false
@@ -638,15 +635,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 if (sort) queryArgs.push('--sort', sort);
                 if (offset) queryArgs.push('--offset', offset.toString());
                 if (enqueue) queryArgs.push('--enqueue', enqueue);
-                if (pretty) queryArgs.push('--pretty');
                 if (reverse) queryArgs.push('--reverse');
                 if (csv) queryArgs.push('--csv');
                 if (jsonl) queryArgs.push('--jsonl');
 
                 const result = await executeCohoCommand(queryArgs);
 
-                // If the output is CSV, JSONL or pretty format, return as is
-                if (csv || jsonl || pretty) {
+                // If the output is CSV or JSONL format, return as is
+                if (csv || jsonl) {
                     return {
                         content: [
                             {
@@ -1330,7 +1326,24 @@ Set these environment variables:
 - import/export: Data import/export
 - kv_get/kv_set/kv_del: Key-value operations
 - logs: View system logs
-- collection: List collections`;
+- collection: List collections
+
+## API URL Format
+
+Your deployed APIs are accessible at:
+**https://{project-name}.api.codehooks.io/{space}/{endpoint}**
+
+Examples:
+- https://junglelab-rgyu.api.codehooks.io/dev/testcollection
+- https://junglelab-rgyu.api.codehooks.io/dev/ping
+- https://your-project.api.codehooks.io/dev/collection-name
+
+Note: Always include the space name (e.g., "dev") in the URL path unless you are using the generated URL (or your own domain) you can find in the space settings. You will also need to add the API key to the request headers.
+
+## Additional Resources
+For comprehensive LLM-optimized documentation:
+- https://codehooks.io/llms.txt - overview and links to codehooks.io documentation
+- https://codehooks.io/llms-full.txt - all the codehooks.io documentation`;
                         break;
 
                     case "chatgpt-prompt":
@@ -1502,7 +1515,7 @@ app.get('/hello', (req, res) => {
 export default app.init();
 \`\`\`
 
-[... rest of documentation would continue with all sections ...]`;
+You can find the complete documentation at https://codehooks.io/llms-full.txt`;
                         break;
                 }
 
