@@ -155,9 +155,7 @@ const logSchema = z.object({
     context: z.string().optional().describe("Filter log on: jobhooks, queuehooks, routehooks, datahooks, auth"),
 });
 
-const docsSchema = z.object({
-    topic: z.enum(["overview", "chatgpt-prompt", "workflow-api", "examples", "all"]).optional().default("overview").describe("Documentation topic to retrieve")
-});
+const docsSchema = z.object({});
 
 const collectionSchema = z.object({
     project: z.string().optional().describe("Project name"),
@@ -220,7 +218,7 @@ const tools = [
     },
     {
         name: "deploy_code",
-        description: "Deploy JavaScript code to Codehooks.io project. \n\nMINIMAL WORKING EXAMPLE:\n```javascript\nimport { app } from 'codehooks-js';\n\napp.get('/hello', (req, res) => {\n  res.json({ message: 'Hello, world!' });\n});\n\n// MANDATORY: bind to serverless runtime\nexport default app.init();\n```\n\nINSTANT CRUD BACKEND:\n```javascript\nimport { app } from 'codehooks-js';\n\n// Creates complete CRUD API for any collection (no schema required)\napp.crudlify();\n\nexport default app.init();\n```\n\nKEY REQUIREMENTS:\n- Always import from 'codehooks-js'\n- Always end with `export default app.init();`\n- Use app.get(), app.post(), app.put(), app.delete() for routes\n- For database: `const conn = await Datastore.open(); conn.insertOne(collection, data);`\n- Use app.crudlify() to create complete CRUD backend with no schema required\n- Package.json will be auto-generated if not provided\n\nDOCUMENTATION:\n- Use 'docs' tool with topics: 'chatgpt-prompt', 'workflow-api' \n- Online ChatGPT prompt: https://codehooks.io/docs/chatgpt-backend-api-prompt\n- Online Workflow API: https://codehooks.io/docs/workflow-api\n- LLM-optimized docs: https://codehooks.io/llms.txt and https://codehooks.io/llms-full.txt\n\nNote: Codehooks.io has CORS built-in by default, so no additional CORS middleware is needed.",
+        description: "Deploy JavaScript code to Codehooks.io project. \n\nMINIMAL WORKING EXAMPLE:\n```javascript\nimport { app } from 'codehooks-js';\n\napp.get('/hello', (req, res) => {\n  res.json({ message: 'Hello, world!' });\n});\n\n// MANDATORY: bind to serverless runtime\nexport default app.init();\n```\n\nINSTANT CRUD BACKEND:\n```javascript\nimport { app } from 'codehooks-js';\n\n// Creates complete CRUD API for any collection (no schema required)\napp.crudlify();\n\nexport default app.init();\n```\n\nKEY REQUIREMENTS:\n- Always import from 'codehooks-js'\n- Always end with `export default app.init();`\n- Use app.get(), app.post(), app.put(), app.delete() for routes\n- For database: `const conn = await Datastore.open(); conn.insertOne(collection, data);`\n- Use app.crudlify() to create complete CRUD backend with no schema required\n- Package.json will be auto-generated if not provided\n\nDOCUMENTATION:\n- Use 'docs' tool for more information \n- Online ChatGPT prompt: https://codehooks.io/docs/chatgpt-backend-api-prompt\n- Online Workflow API: https://codehooks.io/docs/workflow-api\n- LLM-optimized docs: https://codehooks.io/llms.txt and https://codehooks.io/llms-full.txt\n\nNote: Codehooks.io has CORS built-in by default, so no additional CORS middleware is needed.",
         schema: deployCodeSchema,
         inputSchema: {
             type: "object",
@@ -473,18 +471,11 @@ const tools = [
     },
     {
         name: "docs",
-        description: "Get Codehooks.io documentation and examples. Includes ChatGPT prompts, Workflow API docs, and code examples.",
+        description: "Get comprehensive Codehooks.io documentation and examples. Includes complete ChatGPT prompt, setup instructions, code examples, and API reference.",
         schema: docsSchema,
         inputSchema: {
             type: "object",
-            properties: {
-                topic: {
-                    type: "string",
-                    enum: ["overview", "chatgpt-prompt", "workflow-api", "examples", "all"],
-                    default: "overview",
-                    description: "Documentation topic to retrieve"
-                }
-            }
+            properties: {}
         }
     },
     {
@@ -1297,24 +1288,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             }
 
             case "docs": {
-                const { topic = "overview" } = args as DocsArgs;
+                const docsContent = `# Codehooks.io Complete Documentation & ChatGPT Prompt
 
-                let docsContent = "";
-
-                switch (topic) {
-                    case "overview":
-                        docsContent = `# Codehooks.io MCP Server Documentation
+## MCP Server Overview
 
 This MCP server provides integration with Codehooks.io, a serverless backend platform.
 
-## Configuration
+### Configuration
 
 Set these environment variables:
 - CODEHOOKS_PROJECT_NAME: Your project name
 - CODEHOOKS_ADMIN_TOKEN: Your admin token  
 - CODEHOOKS_SPACE: Space to use (default: "dev")
 
-## Available Tools
+### Available MCP Tools
 
 - query_collection: Query database collections
 - deploy_code: Deploy code to your project
@@ -1328,7 +1315,7 @@ Set these environment variables:
 - logs: View system logs
 - collection: List collections
 
-## API URL Format
+### API URL Format
 
 Your deployed APIs are accessible at:
 **https://{project-name}.api.codehooks.io/{space}/{endpoint}**
@@ -1340,18 +1327,52 @@ Examples:
 
 Note: Always include the space name (e.g., "dev") in the URL path unless you are using the generated URL (or your own domain) you can find in the space settings. You will also need to add the API key to the request headers.
 
-## Additional Resources
-For comprehensive LLM-optimized documentation:
-- https://codehooks.io/llms.txt - overview and links to codehooks.io documentation
-- https://codehooks.io/llms-full.txt - all the codehooks.io documentation`;
-                        break;
+---
 
-                    case "chatgpt-prompt":
-                        docsContent = `# ChatGPT Prompt for Codehooks.io
+## Complete ChatGPT Prompt for Building Codehooks.io Backends
 
-You are a helpful assistant that can create serverless backend APIs using Codehooks.io.
+You are an expert in backend development using Codehooks.io. Your task is to generate correct, working JavaScript code for a serverless backend using codehooks-js.
 
-## Minimal Working Example:
+Follow these rules:
+- Use the \`codehooks-js\` package correctly.
+- DO NOT use fs, path, os, or any other modules that require file system access.
+- Create REST API endpoints using \`app.get()\`, \`app.post()\`, \`app.put()\`, and \`app.delete()\`.
+- Use the built-in NoSQL document database via:
+  - \`conn.insertOne(collection, document)\`
+  - \`conn.getOne(collection, ID | Query)\`
+  - \`conn.findOne(collection, ID | Query)\`
+  - \`conn.find(collection, query, options)\` // returns a JSON stream - alias for getMany
+  - \`conn.getMany(collection, query, options)\`
+  - \`conn.updateOne(collection, ID | Query, updateOperators, options)\`
+  - \`conn.updateMany(collection, query, document, options)\`
+  - \`conn.replaceOne(collection, ID | Query, document, options)\`
+  - \`conn.replaceMany(collection, query, document, options)\`
+  - \`conn.removeOne(collection, ID | Query)\`
+  - \`conn.removeMany(collection, query, options)\`
+- Utilize the key-value store with:
+  - \`conn.set(key, value)\`
+  - \`conn.get(key)\`
+  - \`conn.getAll()\`
+  - \`conn.incr(key, increment)\`
+  - \`conn.decr(key, decrement)\`
+  - \`conn.del(key)\`
+  - \`conn.delAll()\`
+- Implement worker queues with \`app.worker(queueName, workerFunction)\` and enqueue tasks using \`conn.enqueue(queueName, payload)\`.
+- Use job scheduling with \`app.job(cronExpression, async () => { ... })\`.
+- Use \`app.crudlify()\` for instant database CRUD REST APIs with validation. Crudlify supports schemas using Zod (with TypeScript), Yup and JSON Schema.
+- Use environment variables for sensitive information like secrets and API keys. Access them using \`process.env.VARIABLE_NAME\`.
+- Generate responses in JSON format where applicable.
+- Avoid unnecessary dependencies or external services.
+- Always import all required npm packages explicitly. Do not assume a module is globally available in Node.js.
+- If a function requires a third-party library (e.g., FormData from form-data), import it explicitly and list it in the dependencies.
+- Do not use browser-specific APIs (like fetch) unless you include the correct polyfill.
+- Always provide a package.json file using the "latest" version of each dependency and notify the user that they need to install the dependencies.
+- Only implement the functionality I explicitly request. Do not assume additional features like CRUD operations, unless I specifically mention them.
+- Implement proper error handling and logging.
+
+### Examples of Codehooks.io functionality:
+
+**Creating a simple API:**
 \`\`\`javascript
 import { app } from 'codehooks-js';
 
@@ -1363,77 +1384,105 @@ app.get('/hello', (req, res) => {
 export default app.init();
 \`\`\`
 
-## Key Requirements:
-- Always import from 'codehooks-js'
-- Always end with \`export default app.init();\`
-- Use app.get(), app.post(), app.put(), app.delete() for routes
-- For database: \`const conn = await Datastore.open(); conn.insertOne(collection, data);\`
-- Package.json will be auto-generated if not provided
-
-## Database Operations:
+**Using the NoSQL Document Database:**
 \`\`\`javascript
 import { app, Datastore } from 'codehooks-js';
 
-app.post('/users', async (req, res) => {
+app.post('/orders', async (req, res) => {
   const conn = await Datastore.open();
-  const result = await conn.insertOne('users', req.body);
-  res.json(result);
-});
-
-app.get('/users', async (req, res) => {
-  const conn = await Datastore.open();
-  const users = await conn.getMany('users', {});
-  res.json(users);
-});
-
-export default app.init();
-\`\`\``;
-                        break;
-
-                    case "workflow-api":
-                        docsContent = `# Workflow API Documentation
-
-The Workflow API allows you to create background jobs and workflows.
-
-## Job Definition
-\`\`\`javascript
-import { app, Datastore } from 'codehooks-js';
-
-// Define a job
-app.job('processData', async (job) => {
-  const { data } = job;
-  // Process data
-  return { result: 'processed' };
-});
-
-// Schedule a job
-app.post('/schedule', async (req, res) => {
-  const jobId = await app.scheduleJob('processData', req.body, {
-    delay: 5000 // 5 seconds delay
-  });
-  res.json({ jobId });
+  const savedOrder = await conn.insertOne('orders', req.body);
+  res.json(savedOrder);
 });
 
 export default app.init();
 \`\`\`
 
-## Cron Jobs
+**Querying the Database and returning JSON stream:**
 \`\`\`javascript
-import { app } from 'codehooks-js';
+import { app, Datastore } from 'codehooks-js';
 
-// Run every hour
-app.cron('0 * * * *', 'hourlyCleanup', async () => {
-  console.log('Running hourly cleanup');
+app.get('/pending-orders', async (req, res) => {
+  const conn = await Datastore.open();
+  const orders = conn.find('orders', {"status": "pending"});
+  orders.json(res);
 });
 
 export default app.init();
-\`\`\``;
-                        break;
+\`\`\`
 
-                    case "examples":
-                        docsContent = `# Code Examples
+**Querying the Database and returning JSON array:**
+\`\`\`javascript
+import { app, Datastore } from 'codehooks-js';
 
-## Simple REST API
+app.get('/processed-orders', async (req, res) => {
+  const conn = await Datastore.open();
+  const orders = await conn.find('orders', {status: "processed"}).toArray();
+  res.json(orders);
+});
+
+export default app.init();
+\`\`\`
+
+**Using the Key-Value Store:**
+\`\`\`javascript
+import { app, Datastore } from 'codehooks-js';
+
+app.post('/settings/:userId', async (req, res) => {
+  const conn = await Datastore.open();
+  await conn.set(\`settings-\${req.params.userId}\`, req.body);
+  res.json({ message: 'Settings saved' });
+});
+
+export default app.init();
+\`\`\`
+
+**Implementing a Worker Queue:**
+\`\`\`javascript
+import { app, Datastore } from 'codehooks-js';
+
+app.worker('sendEmail', async (req,res) => {
+  console.log('Processing email:', req.body.payload);
+  res.end(); // done
+});
+
+app.post('/send-email', async (req, res) => {
+  const conn = await Datastore.open();
+  await conn.enqueue('sendEmail', req.body);
+  res.json({ message: 'Email request received' });
+});
+
+export default app.init();
+\`\`\`
+
+**Scheduling Background Jobs:**
+\`\`\`javascript
+import { app } from 'codehooks-js';
+
+app.job('0 0 * * *', async () => {
+  console.log('Running scheduled task...');
+  res.end(); // done
+});
+
+export default app.init();
+\`\`\`
+
+**Instant CRUD API with Validation:**
+\`\`\`javascript
+import { app } from 'codehooks-js';
+import * as Yup from 'yup';
+
+const customerSchema = Yup.object({
+  name: Yup.string().required(),
+  email: Yup.string().email().required()
+});
+
+app.crudlify({ customer: customerSchema });
+
+// bind to serverless runtime
+export default app.init();
+\`\`\`
+
+**Complete REST API Example:**
 \`\`\`javascript
 import { app, Datastore } from 'codehooks-js';
 
@@ -1471,7 +1520,7 @@ app.delete('/api/items/:id', async (req, res) => {
 export default app.init();
 \`\`\`
 
-## Authentication Example
+**Authentication Example:**
 \`\`\`javascript
 import { app, Datastore } from 'codehooks-js';
 
@@ -1490,34 +1539,19 @@ app.get('/protected', (req, res) => {
 });
 
 export default app.init();
-\`\`\``;
-                        break;
-
-                    case "all":
-                        docsContent = `# Complete Codehooks.io Documentation
-
-## Overview
-Codehooks.io is a serverless backend platform that allows you to build APIs without managing servers.
-
-## Getting Started
-1. Create account at codehooks.io
-2. Get your project name and admin token
-3. Use this MCP server to deploy code
-
-## Minimal Working Example:
-\`\`\`javascript
-import { app } from 'codehooks-js';
-
-app.get('/hello', (req, res) => {
-  res.json({ message: 'Hello, world!' });
-});
-
-export default app.init();
 \`\`\`
 
-You can find the complete documentation at https://codehooks.io/llms-full.txt`;
-                        break;
-                }
+For additional detailed information about the Codehooks.io platform, you can reference https://codehooks.io/llms.txt and https://codehooks.io/llms-full.txt.
+
+**End of ChatGPT Prompt**
+
+---
+
+## Additional Resources
+
+For comprehensive LLM-optimized documentation:
+- https://codehooks.io/llms.txt - overview and links to codehooks.io documentation
+- https://codehooks.io/llms-full.txt - all the codehooks.io documentation`;
 
                 return {
                     content: [
