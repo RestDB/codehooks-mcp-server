@@ -61,6 +61,7 @@ cd ~/mcp-servers
 export PATH="/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:$PATH"
 
 exec docker run --rm -i \
+  --pull always \
   -e CODEHOOKS_PROJECT_NAME=your_project_name \
   -e CODEHOOKS_ADMIN_TOKEN=your_admin_token \
   -e CODEHOOKS_SPACE=your_space_name \
@@ -78,6 +79,7 @@ chmod +x ~/mcp-servers/codehooks.sh
 ```batch
 @echo off
 docker run --rm -i ^
+  --pull always ^
   -e CODEHOOKS_PROJECT_NAME=your_project_name ^
   -e CODEHOOKS_ADMIN_TOKEN=your_admin_token ^
   -e CODEHOOKS_SPACE=your_space_name ^
