@@ -1341,8 +1341,7 @@ Follow these rules:
   - \`conn.insertOne(collection, document)\`
   - \`conn.getOne(collection, ID | Query)\`
   - \`conn.findOne(collection, ID | Query)\`
-  - \`conn.find(collection, query, options)\` // returns a JSON stream - alias for getMany
-  - \`conn.getMany(collection, query, options)\`
+  - \`conn.getMany(collection, query, options) // Note! returns a JSON stream - use toArray() to get an array\`
   - \`conn.updateOne(collection, ID | Query, updateOperators, options)\`
   - \`conn.updateMany(collection, query, document, options)\`
   - \`conn.replaceOne(collection, ID | Query, document, options)\`
@@ -1381,6 +1380,34 @@ app.get('/hello', (req, res) => {
 });
 
 // MANDATORY: bind to serverless runtime
+export default app.init();
+\`\`\`
+
+**Serving Static Files from Deployed Source:**
+\`\`\`javascript
+import { app } from 'codehooks-js';
+
+// Serve static files from deployed source directory
+app.static({ route: '/img', directory: '/assets/images' });
+
+app.get('/hello', (req, res) => {
+  res.json({ message: 'Hello, world!' });
+});
+
+export default app.init();
+\`\`\`
+
+**Serving Uploaded Files:**
+\`\`\`javascript
+import { app } from 'codehooks-js';
+
+// Serve files uploaded with CLI or file-upload tool
+app.storage({ route: '/docs', directory: '/mydocuments' });
+
+app.get('/hello', (req, res) => {
+  res.json({ message: 'Hello, world!' });
+});
+
 export default app.init();
 \`\`\`
 
@@ -1489,7 +1516,7 @@ import { app, Datastore } from 'codehooks-js';
 // Get all items
 app.get('/api/items', async (req, res) => {
   const conn = await Datastore.open();
-  const items = await conn.getMany('items', {});
+  const items = await conn.getMany('items', {}); // JSON stream (use toArray() to get an array)
   res.json(items);
 });
 
