@@ -14,6 +14,11 @@ import { promisify } from "util";
 import { execFile as execFileCallback } from "child_process";
 import { promises as fs } from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Get current directory for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const execFile = promisify(execFileCallback);
 
@@ -29,6 +34,18 @@ const config: CodehooksConfig = {
     space: process.env.CODEHOOKS_SPACE || "dev",
     adminToken: process.env.CODEHOOKS_ADMIN_TOKEN || "",
 };
+
+// Load ChatGPT prompt from markdown file
+let chatgptPrompt: string = 'ChatGPT prompt not available';
+
+async function loadChatGPTPrompt(): Promise<void> {
+    try {
+        chatgptPrompt = await fs.readFile(path.join(__dirname, 'chatgpt-prompt.md'), 'utf8');
+        console.error('ChatGPT prompt loaded from markdown file');
+    } catch (error) {
+        console.error('Could not load ChatGPT prompt from markdown file:', error);
+    }
+}
 
 // Tool schemas with proper typing
 const queryCollectionSchema = z.object({
@@ -1288,7 +1305,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             }
 
             case "docs": {
-                const docsContent = `# Codehooks.io Complete Documentation & ChatGPT Prompt
+                const mcpOverview = `# Codehooks.io Complete Documentation & ChatGPT Prompt
 
 ## MCP Server Overview
 
@@ -1314,277 +1331,38 @@ Set these environment variables:
 - kv_get/kv_set/kv_del: Key-value operations
 - logs: View system logs
 - collection: List collections
+- docs: This tool. View MCP server documentation and chatgpt prompt
 
 ### API URL Format
 
 Your deployed APIs are accessible at:
-**https://{project-name}.api.codehooks.io/{space}/{endpoint}**
+**https://{project-name}.api.codehooks.io/{space}/{endpoint}** (default space name is "dev")
 
 Examples:
 - https://junglelab-rgyu.api.codehooks.io/dev/testcollection
 - https://junglelab-rgyu.api.codehooks.io/dev/ping
 - https://your-project.api.codehooks.io/dev/collection-name
 
-Note: Always include the space name (e.g., "dev") in the URL path unless you are using the generated URL (or your own domain) you can find in the space settings. You will also need to add the API key to the request headers.
-
----
+Note: Always include the space name (e.g., "dev") in the URL path unless you are using the generated URL, ex https://youthful-undulation-f8a2.codehooks.io (or your own domain) you can find in the space settings. You will also need to add the API key to the request headers (x-apikey).
 
 ## Complete ChatGPT Prompt for Building Codehooks.io Backends
 
-You are an expert in backend development using Codehooks.io. Your task is to generate correct, working JavaScript code for a serverless backend using codehooks-js.
-
-Follow these rules:
-- Use the \`codehooks-js\` package correctly.
-- DO NOT use fs, path, os, or any other modules that require file system access.
-- Create REST API endpoints using \`app.get()\`, \`app.post()\`, \`app.put()\`, and \`app.delete()\`.
-- Use the built-in NoSQL document database via:
-  - \`conn.insertOne(collection, document)\`
-  - \`conn.getOne(collection, ID | Query)\`
-  - \`conn.findOne(collection, ID | Query)\`
-  - \`conn.getMany(collection, query, options) // Note! returns a JSON stream - use toArray() to get an array\`
-  - \`conn.updateOne(collection, ID | Query, updateOperators, options)\`
-  - \`conn.updateMany(collection, query, document, options)\`
-  - \`conn.replaceOne(collection, ID | Query, document, options)\`
-  - \`conn.replaceMany(collection, query, document, options)\`
-  - \`conn.removeOne(collection, ID | Query)\`
-  - \`conn.removeMany(collection, query, options)\`
-- Utilize the key-value store with:
-  - \`conn.set(key, value)\`
-  - \`conn.get(key)\`
-  - \`conn.getAll()\`
-  - \`conn.incr(key, increment)\`
-  - \`conn.decr(key, decrement)\`
-  - \`conn.del(key)\`
-  - \`conn.delAll()\`
-- Implement worker queues with \`app.worker(queueName, workerFunction)\` and enqueue tasks using \`conn.enqueue(queueName, payload)\`.
-- Use job scheduling with \`app.job(cronExpression, async () => { ... })\`.
-- Use \`app.crudlify()\` for instant database CRUD REST APIs with validation. Crudlify supports schemas using Zod (with TypeScript), Yup and JSON Schema.
-- Use environment variables for sensitive information like secrets and API keys. Access them using \`process.env.VARIABLE_NAME\`.
-- Generate responses in JSON format where applicable.
-- Avoid unnecessary dependencies or external services.
-- Always import all required npm packages explicitly. Do not assume a module is globally available in Node.js.
-- If a function requires a third-party library (e.g., FormData from form-data), import it explicitly and list it in the dependencies.
-- Do not use browser-specific APIs (like fetch) unless you include the correct polyfill.
-- Always provide a package.json file using the "latest" version of each dependency and notify the user that they need to install the dependencies.
-- Only implement the functionality I explicitly request. Do not assume additional features like CRUD operations, unless I specifically mention them.
-- Implement proper error handling and logging.
-
-### Examples of Codehooks.io functionality:
-
-**Creating a simple API:**
-\`\`\`javascript
-import { app } from 'codehooks-js';
-
-app.get('/hello', (req, res) => {
-  res.json({ message: 'Hello, world!' });
-});
-
-// MANDATORY: bind to serverless runtime
-export default app.init();
-\`\`\`
-
-**Serving Static Files from Deployed Source:**
-\`\`\`javascript
-import { app } from 'codehooks-js';
-
-// Serve static files from deployed source directory
-app.static({ route: '/img', directory: '/assets/images' });
-
-app.get('/hello', (req, res) => {
-  res.json({ message: 'Hello, world!' });
-});
-
-export default app.init();
-\`\`\`
-
-**Serving Uploaded Files:**
-\`\`\`javascript
-import { app } from 'codehooks-js';
-
-// Serve files uploaded with CLI or file-upload tool
-app.storage({ route: '/docs', directory: '/mydocuments' });
-
-app.get('/hello', (req, res) => {
-  res.json({ message: 'Hello, world!' });
-});
-
-export default app.init();
-\`\`\`
-
-**Using the NoSQL Document Database:**
-\`\`\`javascript
-import { app, Datastore } from 'codehooks-js';
-
-app.post('/orders', async (req, res) => {
-  const conn = await Datastore.open();
-  const savedOrder = await conn.insertOne('orders', req.body);
-  res.json(savedOrder);
-});
-
-export default app.init();
-\`\`\`
-
-**Querying the Database and returning JSON stream:**
-\`\`\`javascript
-import { app, Datastore } from 'codehooks-js';
-
-app.get('/pending-orders', async (req, res) => {
-  const conn = await Datastore.open();
-  const orders = conn.find('orders', {"status": "pending"});
-  orders.json(res);
-});
-
-export default app.init();
-\`\`\`
-
-**Querying the Database and returning JSON array:**
-\`\`\`javascript
-import { app, Datastore } from 'codehooks-js';
-
-app.get('/processed-orders', async (req, res) => {
-  const conn = await Datastore.open();
-  const orders = await conn.find('orders', {status: "processed"}).toArray();
-  res.json(orders);
-});
-
-export default app.init();
-\`\`\`
-
-**Using the Key-Value Store:**
-\`\`\`javascript
-import { app, Datastore } from 'codehooks-js';
-
-app.post('/settings/:userId', async (req, res) => {
-  const conn = await Datastore.open();
-  await conn.set(\`settings-\${req.params.userId}\`, req.body);
-  res.json({ message: 'Settings saved' });
-});
-
-export default app.init();
-\`\`\`
-
-**Implementing a Worker Queue:**
-\`\`\`javascript
-import { app, Datastore } from 'codehooks-js';
-
-app.worker('sendEmail', async (req,res) => {
-  console.log('Processing email:', req.body.payload);
-  res.end(); // done
-});
-
-app.post('/send-email', async (req, res) => {
-  const conn = await Datastore.open();
-  await conn.enqueue('sendEmail', req.body);
-  res.json({ message: 'Email request received' });
-});
-
-export default app.init();
-\`\`\`
-
-**Scheduling Background Jobs:**
-\`\`\`javascript
-import { app } from 'codehooks-js';
-
-app.job('0 0 * * *', async () => {
-  console.log('Running scheduled task...');
-  res.end(); // done
-});
-
-export default app.init();
-\`\`\`
-
-**Instant CRUD API with Validation:**
-\`\`\`javascript
-import { app } from 'codehooks-js';
-import * as Yup from 'yup';
-
-const customerSchema = Yup.object({
-  name: Yup.string().required(),
-  email: Yup.string().email().required()
-});
-
-app.crudlify({ customer: customerSchema });
-
-// bind to serverless runtime
-export default app.init();
-\`\`\`
-
-**Complete REST API Example:**
-\`\`\`javascript
-import { app, Datastore } from 'codehooks-js';
-
-// Get all items
-app.get('/api/items', async (req, res) => {
-  const conn = await Datastore.open();
-  const items = await conn.getMany('items', {}); // JSON stream (use toArray() to get an array)
-  res.json(items);
-});
-
-// Create item
-app.post('/api/items', async (req, res) => {
-  const conn = await Datastore.open();
-  const result = await conn.insertOne('items', {
-    ...req.body,
-    createdAt: new Date()
-  });
-  res.json(result);
-});
-
-// Update item
-app.put('/api/items/:id', async (req, res) => {
-  const conn = await Datastore.open();
-  const result = await conn.updateOne('items', req.params.id, req.body);
-  res.json(result);
-});
-
-// Delete item
-app.delete('/api/items/:id', async (req, res) => {
-  const conn = await Datastore.open();
-  await conn.removeOne('items', req.params.id);
-  res.json({ success: true });
-});
-
-export default app.init();
-\`\`\`
-
-**Authentication Example:**
-\`\`\`javascript
-import { app, Datastore } from 'codehooks-js';
-
-// Middleware for authentication
-app.use('/*', async (req, res, next) => {
-  const token = req.headers.authorization;
-  if (!token) {
-    return res.status(401).json({ error: 'No token provided' });
-  }
-  // Verify token logic here
-  next();
-});
-
-app.get('/protected', (req, res) => {
-  res.json({ message: 'This is protected' });
-});
-
-export default app.init();
-\`\`\`
-
-For additional detailed information about the Codehooks.io platform, you can reference https://codehooks.io/llms.txt and https://codehooks.io/llms-full.txt.
+${chatgptPrompt}
 
 **End of ChatGPT Prompt**
 
----
 
 ## Additional Resources
 
 For comprehensive LLM-optimized documentation:
 - https://codehooks.io/llms.txt - overview and links to codehooks.io documentation
-- https://codehooks.io/llms-full.txt - all the codehooks.io documentation`;
+- https://codehooks.io/llms-full.txt - all the codehooks.io documentation (note: this is very long)`;
 
                 return {
                     content: [
                         {
                             type: "text",
-                            text: docsContent
+                            text: mcpOverview
                         }
                     ],
                     isError: false
@@ -1661,6 +1439,10 @@ server.setRequestHandler(CompleteRequestSchema, async (request) => {
 
 // Start the server
 console.error("=== MCP Server Starting ===");
+
+// Load ChatGPT prompt from markdown file
+await loadChatGPTPrompt();
+
 console.error("Environment:");
 console.error(`- Project: ${config.projectId || 'Not set, you need to supply the Agent with the project name'}`);
 console.error(`- Space: ${config.space}`);
