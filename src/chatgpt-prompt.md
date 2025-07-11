@@ -370,6 +370,78 @@ function validateWebhookSignature(payload, signature) {
 export default app.init();
 ```
 
+** Workflow Example:**
+(More information about workflows can be found at https://codehooks.io/docs/workflow-api)
+
+```javascript
+import { app } from 'codehooks-js';
+
+// Create a workflow definition
+const workflow = app.createWorkflow('simpleTask', 'Basic workflow example', {
+  // Step 1: Initialize the workflow
+  begin: async function (state, goto) {
+    state = {
+      message: 'Starting workflow',
+      // Add a random number to demonstrate branching
+      value: Math.floor(Math.random() * 10),
+    };
+    goto('decide', state);
+  },
+
+  // Step 2: Decide which path to take
+  decide: async function (state, goto) {
+    // Branch based on whether the value is even or odd
+    if (state.value % 2 === 0) {
+      goto('evenPath', state);
+    } else {
+      goto('oddPath', state);
+    }
+  },
+
+  // Step 3a: Handle even numbers
+  evenPath: async function (state, goto) {
+    state = {
+      message: 'Processing even number',
+      path: 'even',
+      processed: true,
+    };
+    goto('end', state);
+  },
+
+  // Step 3b: Handle odd numbers
+  oddPath: async function (state, goto) {
+    state = {
+      message: 'Processing odd number',
+      path: 'odd',
+      processed: true,
+    };
+    goto('end', state);
+  },
+
+  // Step 4: End the workflow
+  end: function (state, goto) {
+    state = {
+      final_message: `Workflow completed! Processed ${state.path} number: ${state.value}`,
+    };
+    goto(null, state); // workflow complete
+  },
+});
+
+// emitted event when a workflow completes
+workflow.on('completed', (data) => {
+  console.log('Workflow completed:', data);
+});
+
+// REST API to start a new workflow instance
+app.post('/start', async (req, res) => {
+  const result = await workflow.start({ foo: 'bar' });
+  res.json(result);
+});
+
+// export app interface to serverless execution
+export default app.init();
+```
+
 For additional detailed information about the Codehooks.io platform, you can reference https://codehooks.io/llms.txt
 
 [describe what you need here]
