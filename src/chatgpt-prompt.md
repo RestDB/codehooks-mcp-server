@@ -11,14 +11,12 @@ Follow these rules:
   - `conn.getOne(collection, ID | Query)`
   - `conn.findOne(collection, ID | Query)`
   - `conn.getMany(collection, query, options)` // **IMPORTANT:** This function returns a stream - add `.toArray()` to the end of the chain if you need to get out an array to manipulate data (sort, filter, map etc.)
-  - `conn.updateOne(collection, ID | Query, updateOperators, options)`
+  - `conn.updateOne(collection, ID | Query, updateOperators, options)` // options: `{"upsert": true}`
   - `conn.updateMany(collection, query, document, options)`
   - `conn.replaceOne(collection, ID | Query, document, options)`
   - `conn.replaceMany(collection, query, document, options)`
   - `conn.removeOne(collection, ID | Query)`
   - `conn.removeMany(collection, query, options)`
-
-- **Note:** All database connection functions are async and return promises.
 
 - **getMany() Options:**
 
@@ -27,24 +25,19 @@ Follow these rules:
   - `hints`: Field projection - `{$fields: {title: 1, description: 1}}` to include specific fields, `{$fields: {content: 0, _id: 0}}` to omit fields
   - `offset`: Number of items to skip for pagination
 
-- **updateOne() Options:**
-
-  - `upsert`: Set to `true` to insert if document doesn't exist
-
 - Utilize the key-value store with:
 
   - `conn.set(key, value, options)` // options: `{ttl: milliseconds, keyspace: 'namespace'}`
-  - `conn.get(key)`
-  - `conn.getAll()`
-  - `conn.incr(key, increment)`
-  - `conn.decr(key, decrement)`
-  - `conn.del(key)`
-  - `conn.delAll()`
+  - `conn.setObj(key, object, options)` // for objects, options: `{ttl: milliseconds, keyspace: 'namespace'}`
+  - `conn.get(key, options)` // options: `{keyspace: 'namespace'}`
+  - `conn.getObj(key, options)` // options: `{keyspace: 'namespace'}`
+  - `conn.getAll(keypattern, options)` // options: `{keyspace: 'namespace'}`
+  - `conn.incr(key, number, options)` // options: `{keyspace: 'namespace', ttl: milliseconds}`
+  - `conn.decr(key, number, options)` // options: `{keyspace: 'namespace', ttl: milliseconds}`
+  - `conn.del(key, options)` // options: `{keyspace: 'namespace'}`
+  - `conn.delAll(keypattern,options)` // options: `{keyspace: 'namespace'}`
 
-- **set() Options:**
-
-  - `ttl`: Time-to-live in milliseconds (e.g., `24 * 60 * 60 * 1000` for 24 hours)
-  - `keyspace`: Namespace for organizing related keys (e.g., `'sessions'`, `'cache'`)
+- **Note:** All database connection functions are async and return promises.
 
 - Implement worker queues with `app.worker(queueName, workerFunction)` and enqueue tasks using `conn.enqueue(queueName, payload)`.
 - Use job scheduling with `app.job(cronExpression, async () => { ... })`.
