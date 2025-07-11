@@ -1351,12 +1351,10 @@ ${chatgptPrompt}
 
 **End of ChatGPT Prompt**
 
-
 ## Additional Resources
 
 For comprehensive LLM-optimized documentation:
-- https://codehooks.io/llms.txt - overview and links to codehooks.io documentation
-- https://codehooks.io/llms-full.txt - all the codehooks.io documentation (note: this is very long)`;
+- https://codehooks.io/llms.txt - overview and links to codehooks.io documentation`;
 
                 return {
                     content: [
