@@ -11,7 +11,7 @@
         "build"
     ],
     "scripts": {
-        "build": "tsc && node -e \"require('fs').chmodSync('build/index.js', '755')\"",
+        "build": "tsc && node -e \"require('fs').copyFileSync('src/chatgpt-prompt.md', 'build/chatgpt-prompt.md')\" && node -e \"require('fs').chmodSync('build/index.js', '755')\"",
         "prepare": "npm run build",
         "watch": "tsc --watch",
         "inspector": "npm run build && npx @modelcontextprotocol/inspector --config mcp-dev.json --server codehooks-mcp"
