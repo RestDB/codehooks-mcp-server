@@ -297,22 +297,77 @@ export default app.init();
 
 ```javascript
 import { app, Datastore } from 'codehooks-js';
+import crypto from 'crypto';
 
-// Middleware for authentication
-app.use('/*', async (req, res, next) => {
-  const token = req.headers.authorization;
-  if (!token) {
-    return res.status(401).json({ error: 'No token provided' });
+// Protected API routes (require JWT/API key - handled automatically by Codehooks)
+app.get('/api/protected', (req, res) => {
+  res.json({ message: 'This is protected content' });
+});
+
+app.get('/api/admin/users', (req, res) => {
+  res.json({ users: ['user1', 'user2'] });
+});
+
+// Public route (no auth needed)
+app.get('/api/public', (req, res) => {
+  res.json({ message: 'This is public' });
+});
+
+// Auth hook for public routes - allow access without authentication
+app.auth('/api/public', (req, res, next) => {
+  next(); // Allow public access
+});
+
+// Auth hook - called when NO JWT/API key is present
+// Use to allow access or create custom authentication logic
+app.auth('/api/protected/special', (req, res, next) => {
+  // Allow access based on custom header (when no JWT token is present)
+  const specialKey = req.headers['x-special-access'];
+  if (specialKey === process.env.SPECIAL_ACCESS_KEY) {
+    next(); // Allow access without JWT
+  } else {
+    res.status(401).json({ error: 'Special access required' });
+    res.end();
   }
-  // Verify token logic here
-  next();
 });
 
-app.get('/protected', (req, res) => {
-  res.json({ message: 'This is protected' });
+// Auth hook for IP-based access control
+app.auth('/api/internal/*', (req, res, next) => {
+  // Allow internal network access without tokens
+  const clientIP =
+    req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+  if (clientIP.startsWith('192.168.') || clientIP.startsWith('10.')) {
+    next(); // Allow internal network access
+  } else {
+    res.status(403).json({ error: 'Internal network access only' });
+    res.end();
+  }
 });
+
+// Auth hook for webhook endpoints
+app.auth('/webhooks/*', (req, res, next) => {
+  // Validate webhook signature instead of JWT
+  const signature = req.headers['x-webhook-signature'];
+  const payload = JSON.stringify(req.body);
+
+  if (validateWebhookSignature(payload, signature)) {
+    next(); // Allow webhook
+  } else {
+    res.status(401).json({ error: 'Invalid webhook signature' });
+    res.end();
+  }
+});
+
+function validateWebhookSignature(payload, signature) {
+  // Custom webhook validation logic using Node.js crypto module
+  const expectedSignature = crypto
+    .createHmac('sha256', process.env.WEBHOOK_SECRET)
+    .update(payload)
+    .digest('hex');
+  return signature === expectedSignature;
+}
 
 export default app.init();
 ```
 
-For additional detailed information about the Codehooks.io platform, you can reference https://codehooks.io/llms.txt and https://codehooks.io/llms-full.txt.
+For additional detailed information about the Codehooks.io platform, you can reference https://codehooks.io/llms.txt
