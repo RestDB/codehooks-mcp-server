@@ -1,0 +1,14 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+  "name": "io.github.restdb/codehooks-mcp",
+  "description": "MCP server for codehooks.io",
+  "version": "0.2.8",
+  "packages": [
+    {
+      "registryType": "oci",
+      "registryBaseUrl": "https://ghcr.io",
+      "identifier": "restdb/codehooks-mcp",
+      "version": "0.2.8"
+    }
+  ]
+}

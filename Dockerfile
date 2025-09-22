@@ -1,6 +1,9 @@
 # Use Node.js 20 as base image
 FROM node:20-slim
 
+# Add MCP server metadata
+LABEL io.modelcontextprotocol.server.name="io.github.restdb/codehooks-mcp"
+
 # Install required system dependencies
 RUN apt-get update && apt-get install -y \
     curl \
