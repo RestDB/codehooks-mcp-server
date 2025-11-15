@@ -5,10 +5,13 @@
   "version": "0.2.8",
   "packages": [
     {
-      "registryType": "oci",
-      "registryBaseUrl": "https://ghcr.io",
+      "registry_type": "oci",
+      "registry_base_url": "https://ghcr.io",
       "identifier": "restdb/codehooks-mcp",
-      "version": "0.2.8"
+      "version": "0.2.8",
+      "transport": {
+        "type": "stdio"
+      }
     }
   ]
 }
