@@ -39,6 +39,8 @@ Follow these rules:
 
 - **Note:** All database connection functions are async and return promises.
 
+- **Webhook Support:** Use `req.rawBody` to access the raw, unparsed request body. This is essential for webhook signature verification where the exact byte sequence matters (HMAC validation). Using `req.body` or `JSON.stringify(req.body)` will fail because JSON parsing may reorder keys or change whitespace.
+
 - Implement worker queues with `app.worker(queueName, workerFunction)` and enqueue tasks using `conn.enqueue(queueName, payload)`.
 - Use job scheduling with `app.job(cronExpression, async () => { ... })`.
 - Use `app.crudlify()` for instant database CRUD REST APIs with validation. Crudlify supports schemas using Zod (with TypeScript), Yup and JSON Schema.
@@ -344,28 +346,89 @@ app.auth('/api/internal/*', (req, res, next) => {
   }
 });
 
-// Auth hook for webhook endpoints
-app.auth('/webhooks/*', (req, res, next) => {
-  // Validate webhook signature instead of JWT
-  const signature = req.headers['x-webhook-signature'];
-  const payload = JSON.stringify(req.body);
+export default app.init();
+```
 
-  if (validateWebhookSignature(payload, signature)) {
-    next(); // Allow webhook
-  } else {
-    res.status(401).json({ error: 'Invalid webhook signature' });
-    res.end();
+**Webhook Handler with Signature Verification:**
+
+Webhooks require special handling for signature verification. Use `req.rawBody` to access the unprocessed request body, which is essential for HMAC signature validation.
+
+```javascript
+import { app, Datastore } from 'codehooks-js';
+import crypto from 'crypto';
+
+// Auth hook to bypass JWT for webhook endpoints
+app.auth('/webhook/*', (req, res, next) => {
+  next(); // Allow webhooks without JWT
+});
+
+// Stripe webhook handler example
+app.post('/webhook/stripe', async (req, res) => {
+  const signature = req.headers['stripe-signature'];
+  const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
+
+  if (!signature) {
+    return res.status(400).json({ error: 'Missing signature' });
+  }
+
+  try {
+    // IMPORTANT: Use req.rawBody for signature verification
+    // req.rawBody contains the raw request body before JSON parsing
+    const expectedSignature = crypto
+      .createHmac('sha256', WEBHOOK_SECRET)
+      .update(req.rawBody)
+      .digest('hex');
+
+    // Verify the signature matches
+    if (signature !== expectedSignature) {
+      return res.status(401).json({ error: 'Invalid signature' });
+    }
+
+    // Signature is valid - process the webhook
+    const event = req.body;
+    console.log('Webhook event:', event.type);
+
+    // Store event in database
+    const conn = await Datastore.open();
+    await conn.insertOne('webhook_events', {
+      type: event.type,
+      data: event.data,
+      receivedAt: new Date(),
+    });
+
+    // Acknowledge receipt to prevent retries
+    res.status(200).json({ received: true });
+  } catch (error) {
+    console.error('Webhook error:', error);
+    res.status(500).json({ error: 'Webhook processing failed' });
   }
 });
 
-function validateWebhookSignature(payload, signature) {
-  // Custom webhook validation logic using Node.js crypto module
+// Generic webhook handler with custom signature validation
+app.post('/webhook/generic', async (req, res) => {
+  const signature = req.headers['x-webhook-signature'];
+  const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
+
+  // IMPORTANT: Always use req.rawBody for signature verification
+  // Using req.body or JSON.stringify(req.body) will fail because:
+  // 1. JSON parsing may reorder keys
+  // 2. Whitespace formatting may differ
+  // 3. req.rawBody preserves the exact bytes sent by the webhook provider
   const expectedSignature = crypto
-    .createHmac('sha256', process.env.WEBHOOK_SECRET)
-    .update(payload)
+    .createHmac('sha256', WEBHOOK_SECRET)
+    .update(req.rawBody)
     .digest('hex');
-  return signature === expectedSignature;
-}
+
+  if (signature !== expectedSignature) {
+    return res.status(401).json({ error: 'Invalid signature' });
+  }
+
+  // Process webhook event
+  const conn = await Datastore.open();
+  await conn.insertOne('events', req.body);
+
+  res.status(200).json({ success: true });
+});
 
 export default app.init();
 ```
