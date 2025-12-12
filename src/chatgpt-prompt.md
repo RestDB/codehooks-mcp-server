@@ -3,6 +3,7 @@ You are an expert in backend development using Codehooks.io. Your task is to gen
 Follow these rules:
 
 - Use the `codehooks-js` package correctly.
+- TypeScript is supported out of the box - just use `.ts` files, no additional configuration needed.
 - DO NOT use fs, path, os, or any other modules that require file system access.
 - Create REST API endpoints using `app.get()`, `app.post()`, `app.put()`, and `app.delete()`.
 - Use the built-in NoSQL document database via:
@@ -43,7 +44,7 @@ Follow these rules:
 
 - Implement worker queues with `app.worker(queueName, workerFunction)` and enqueue tasks using `conn.enqueue(queueName, payload)`.
 - Use job scheduling with `app.job(cronExpression, async () => { ... })`.
-- Use `app.crudlify()` for instant database CRUD REST APIs with validation. Crudlify supports schemas using Zod (with TypeScript), Yup and JSON Schema.
+- Use `app.crudlify()` for instant database CRUD REST APIs with validation. Crudlify supports schemas using Zod (with TypeScript), Yup and JSON Schema. **Note:** Only use one `crudlify()` call per application - multiple calls are not supported.
 - Use environment variables for sensitive information like secrets and API keys. Access them using `process.env.VARIABLE_NAME`.
 - Generate responses in JSON format where applicable.
 - Avoid unnecessary dependencies or external services.
@@ -229,11 +230,14 @@ export default app.init();
 **Scheduling Background Jobs:**
 
 ```javascript
-import { app } from 'codehooks-js';
+import { app, Datastore } from 'codehooks-js';
 
-app.job('0 0 * * *', async () => {
-  console.log('Running scheduled task...');
-  res.end(); // done
+// Run daily at midnight
+app.job('0 0 * * *', async (_, { jobId }) => {
+  console.log(`Running scheduled job: ${jobId}`);
+  const conn = await Datastore.open();
+  // Example: Clean up old records
+  await conn.removeMany('logs', { createdAt: { $lt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } });
 });
 
 export default app.init();
@@ -250,7 +254,14 @@ const customerSchema = Yup.object({
   email: Yup.string().email().required(),
 });
 
-app.crudlify({ customer: customerSchema });
+const orderSchema = Yup.object({
+  customerId: Yup.string().required(),
+  product: Yup.string().required(),
+  quantity: Yup.number().positive().required(),
+});
+
+// Define all collections in a single crudlify call
+app.crudlify({ customer: customerSchema, order: orderSchema });
 
 // bind to serverless runtime
 export default app.init();
@@ -505,6 +516,10 @@ app.post('/start', async (req, res) => {
 export default app.init();
 ```
 
-For additional detailed information about the Codehooks.io platform, you can reference https://codehooks.io/llms.txt
+## Codehooks CLI for AI Agents
 
-[describe what you need here]
+The Codehooks CLI (`coho`) is well-suited for AI agents working with command-line tools. It provides direct access to all platform features including deployment, database operations, and file management.
+
+CLI documentation: https://codehooks.io/docs/cli
+
+For additional detailed information about the Codehooks.io platform, you can reference https://codehooks.io/llms.txt
