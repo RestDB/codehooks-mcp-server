@@ -91,6 +91,8 @@ Follow these rules:
   - `res.end()` - End the response (required if not using res.json)
   - `res.redirect(statusCode, url)` - Redirect client (301 or 302)
 
+  **Important:** `res.json()`, `res.send()`, and `res.end()` terminate execution immediately. Any code after these calls will not run.
+
 - Implement worker queues with `app.worker(queueName, workerFunction, options)` and enqueue tasks using `conn.enqueue(queueName, payload)`. Options: `{workers: 1, timeout: 30000}`
 - Use job scheduling with `app.job(cronExpression, async () => { ... })`.
 - Use `app.crudlify()` for instant database CRUD REST APIs with validation. Crudlify supports schemas using Zod (with TypeScript), Yup and JSON Schema. **Note:** Only use one `crudlify()` call per application - multiple calls are not supported.
