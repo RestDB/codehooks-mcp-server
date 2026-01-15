@@ -6,6 +6,7 @@ Follow these rules:
 - TypeScript is supported out of the box - just use `.ts` files, no additional configuration needed. Codehooks generates the tsconfig.json file for you on compile.
 - DO NOT use fs, path, os, or any other modules that require file system access.
 - DO NOT assume that you can use all MongoDB features - only use the Codehooks.io APIs and features.
+- **Note:** To call other Codehooks-hosted APIs from within Codehooks, use `app.internalFetch(url, options)` instead of regular fetch (required due to proxy configuration).
 - Create REST API endpoints using `app.get()`, `app.post()`, `app.put()`, `app.patch()` and `app.delete()`.
 - Use the built-in NoSQL document database via:
 
@@ -29,6 +30,30 @@ Follow these rules:
   - `hints`: Field projection - `{$fields: {title: 1, description: 1}}` to include specific fields, `{$fields: {content: 0, _id: 0}}` to omit fields
   - `offset`: Number of items to skip for pagination
 
+- **Query Operators:**
+
+  - **Comparison:** `$gt`, `$gte`, `$lt`, `$lte`, `$ne`, `$exists`
+  - **Logical:** `$or`, `$and`, `$not`, `$in`, `$nin`
+  - **String:** `$regex`, `$startsWith`, `$endsWith`
+  - **Array:** `$elemMatch`
+  - **Date:** `$date` (use with ISO format strings)
+  - **Nested fields:** Use dot notation (e.g., `{ "address.city": "Oslo" }`)
+
+  Example: `{ age: { $gte: 18 }, status: { $in: ['active', 'pending'] } }`
+
+- **Update Operators** (for `updateOne`/`updateMany`):
+
+  - `$set` - Set field values
+  - `$unset` - Remove fields
+  - `$inc` - Increment/decrement numeric fields
+  - `$push` - Append to array
+  - `$pull` - Remove from array
+  - `$pop` - Remove first (-1) or last (1) array element
+  - `$addToSet` - Add unique element to array
+  - `$rename` - Rename a field
+
+  Example: `{ $set: { status: 'active' }, $inc: { views: 1 } }`
+
 - Utilize the key-value store with:
 
   - `conn.set(key, value, options)` // options: `{ttl: milliseconds, keyspace: 'namespace'}`
@@ -45,7 +70,28 @@ Follow these rules:
 
 - **Webhook Support:** Use `req.rawBody` to access the raw, unparsed request body. This is essential for webhook signature verification where the exact byte sequence matters (HMAC validation). Using `req.body` or `JSON.stringify(req.body)` will fail because JSON parsing may reorder keys or change whitespace.
 
-- Implement worker queues with `app.worker(queueName, workerFunction)` and enqueue tasks using `conn.enqueue(queueName, payload)`. // options for app.worker: `{workers: 1}`
+- **Request Object Properties:**
+
+  - `req.body` - Parsed JSON request body
+  - `req.rawBody` - Raw unparsed request body (use for webhook signature verification)
+  - `req.query` - Query string parameters (e.g., `/items?status=active` → `req.query.status`)
+  - `req.params` - URL path parameters (e.g., `/items/:id` → `req.params.id`)
+  - `req.headers` - Request headers object
+  - `req.method` - HTTP method (GET, POST, PUT, DELETE, etc.)
+  - `req.apiPath` - The matched API path (e.g., `"/test-path"`)
+
+- **Response Object Methods:**
+
+  - `res.json(object)` - Send JSON response (ends request)
+  - `res.send(data)` - Send string response
+  - `res.status(code)` - Set HTTP status code (chainable)
+  - `res.set(header, value)` - Set a response header
+  - `res.headers(object)` - Set multiple headers
+  - `res.write(data, [encoding])` - Stream data to client
+  - `res.end()` - End the response (required if not using res.json)
+  - `res.redirect(statusCode, url)` - Redirect client (301 or 302)
+
+- Implement worker queues with `app.worker(queueName, workerFunction, options)` and enqueue tasks using `conn.enqueue(queueName, payload)`. Options: `{workers: 1, timeout: 30000}`
 - Use job scheduling with `app.job(cronExpression, async () => { ... })`.
 - Use `app.crudlify()` for instant database CRUD REST APIs with validation. Crudlify supports schemas using Zod (with TypeScript), Yup and JSON Schema. **Note:** Only use one `crudlify()` call per application - multiple calls are not supported.
 - Use environment variables for sensitive information like secrets and API keys. Access them using `process.env.VARIABLE_NAME`.
@@ -162,8 +208,13 @@ export default app.init();
 
 ```javascript
 import { app, Datastore } from 'codehooks-js';
+import crypto from 'crypto';
 
 const ONE_DAY = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+
+// Helper functions
+const generateSessionId = () => crypto.randomUUID();
+const performExpensiveComputation = async () => ({ data: 'computed result' });
 
 // Basic key-value storage
 app.post('/settings/:userId', async (req, res) => {
@@ -275,10 +326,20 @@ export default app.init();
 ```javascript
 import { app, Datastore } from 'codehooks-js';
 
-// Get all items using getMany with toArray() to get an array
+// Get all items with pagination using req.query
 app.get('/api/items', async (req, res) => {
   const conn = await Datastore.open();
-  const items = await conn.getMany('items', {}).toArray();
+  const { limit = '10', offset = '0' } = req.query;
+  const items = await conn
+    .getMany(
+      'items',
+      {},
+      {
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+      }
+    )
+    .toArray();
   res.json(items);
 });
 
@@ -295,7 +356,9 @@ app.post('/api/items', async (req, res) => {
 // Update item
 app.put('/api/items/:id', async (req, res) => {
   const conn = await Datastore.open();
-  const result = await conn.updateOne('items', req.params.id, req.body);
+  const result = await conn.updateOne('items', req.params.id, {
+    $set: req.body,
+  });
   res.json(result);
 });
 
@@ -309,11 +372,35 @@ app.delete('/api/items/:id', async (req, res) => {
 export default app.init();
 ```
 
-**Authentication Example:**
+**Error Handling:**
 
 ```javascript
 import { app, Datastore } from 'codehooks-js';
-import crypto from 'crypto';
+
+app.get('/api/items/:id', async (req, res) => {
+  try {
+    const conn = await Datastore.open();
+    // Use findOneOrNull to avoid exceptions for missing documents
+    const item = await conn.findOneOrNull('items', req.params.id);
+
+    if (!item) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+
+    res.json(item);
+  } catch (error) {
+    console.error('Database error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+export default app.init();
+```
+
+**Authentication Example:**
+
+```javascript
+import { app } from 'codehooks-js';
 
 // Protected API routes (require JWT/API key - handled automatically by Codehooks)
 app.get('/api/protected', (req, res) => {
@@ -510,11 +597,11 @@ const workflow = app.createWorkflow(
     collectionName: 'workflows', // Set storage collection name
     queuePrefix: 'workflow', // Set queue prefix name
     timeout: 30000, // Global timeout in milliseconds
-    maxStepCount: 3, // Maximum step execution count
+    maxStepCount: 100, // Maximum step execution count
     workers: 5, // Number of parallel workers per queue
     steps: {
-      // Step-specific configuration
-      stepName: {
+      // Step-specific configuration (use actual step names)
+      decide: {
         timeout: 3000, // Step-specific timeout
         maxRetries: 3, // Step-specific retry count
         workers: 2, // Step-specific worker count
