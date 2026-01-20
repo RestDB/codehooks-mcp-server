@@ -49,7 +49,7 @@ The simplest setup - no environment variables needed. The AI agent will guide yo
   "mcpServers": {
     "codehooks": {
       "command": "docker",
-      "args": ["run", "-i", "--rm", "ghcr.io/restdb/codehooks-mcp:latest"]
+      "args": ["run", "-i", "--rm", "--pull", "always", "ghcr.io/restdb/codehooks-mcp:latest"]
     }
   }
 }
@@ -62,7 +62,7 @@ The simplest setup - no environment variables needed. The AI agent will guide yo
   "mcpServers": {
     "codehooks": {
       "command": "docker",
-      "args": ["run", "-i", "--rm", "ghcr.io/restdb/codehooks-mcp:latest"]
+      "args": ["run", "-i", "--rm", "--pull", "always", "ghcr.io/restdb/codehooks-mcp:latest"]
     }
   }
 }
@@ -74,7 +74,7 @@ When you start a conversation, the AI will:
 
 ### Option 2: Pre-configured Admin Token
 
-Set your admin token once in the config, and only configure the project per-conversation.
+Set your admin token once, and only configure the project per-conversation.
 
 First, get your admin token:
 
@@ -83,14 +83,43 @@ coho login
 coho add-admintoken
 ```
 
-Then add to your MCP config:
+**Option 2a: Token from environment variable (recommended)**
+
+Add the token to your shell profile (`~/.zshrc` or `~/.bashrc`):
+
+```bash
+export CODEHOOKS_ADMIN_TOKEN=your_token_here
+```
+
+Or create a `.env` file in your project (add to `.gitignore`):
+
+```bash
+CODEHOOKS_ADMIN_TOKEN=your_token_here
+```
+
+Then source it before running: `source .env`
+
+MCP config passes the variable from host to container:
 
 ```json
 {
   "mcpServers": {
     "codehooks": {
       "command": "docker",
-      "args": ["run", "-i", "--rm", "-e", "CODEHOOKS_ADMIN_TOKEN=your_token_here", "ghcr.io/restdb/codehooks-mcp:latest"]
+      "args": ["run", "-i", "--rm", "--pull", "always", "-e", "CODEHOOKS_ADMIN_TOKEN", "ghcr.io/restdb/codehooks-mcp:latest"]
+    }
+  }
+}
+```
+
+**Option 2b: Token directly in config**
+
+```json
+{
+  "mcpServers": {
+    "codehooks": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "--pull", "always", "-e", "CODEHOOKS_ADMIN_TOKEN=your_token_here", "ghcr.io/restdb/codehooks-mcp:latest"]
     }
   }
 }
@@ -110,7 +139,7 @@ export PATH="/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:$PATH"
 
 exec docker run --rm -i \
   --pull always \
-  -e CODEHOOKS_ADMIN_TOKEN=your_admin_token \
+  -e CODEHOOKS_ADMIN_TOKEN \
   ghcr.io/restdb/codehooks-mcp:latest
 ```
 
@@ -122,7 +151,7 @@ Make it executable: `chmod +x ~/mcp-servers/codehooks.sh`
 @echo off
 docker run --rm -i ^
   --pull always ^
-  -e CODEHOOKS_ADMIN_TOKEN=your_admin_token ^
+  -e CODEHOOKS_ADMIN_TOKEN ^
   ghcr.io/restdb/codehooks-mcp:latest
 ```
 
@@ -137,6 +166,8 @@ Then reference the script in your MCP config:
   }
 }
 ```
+
+Make sure `CODEHOOKS_ADMIN_TOKEN` is set in your environment (shell profile or `.env` file).
 
 ### How Authentication Works
 
@@ -182,7 +213,7 @@ Every Codehooks project has a `config.json` file with this structure:
 
 ```json
 {
-  "project": "myproject-abcd",
+  "name": "myproject-abcd",
   "space": "dev"
 }
 ```

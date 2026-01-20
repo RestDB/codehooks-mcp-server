@@ -219,7 +219,7 @@ type SetAdminTokenArgs = z.infer<typeof setAdminTokenSchema>;
 const tools = [
     {
         name: "set_project",
-        description: "Set the active Codehooks project and space for this session. MUST be called before using any other tools (except set_admin_token). The project and space values can be found in the 'config.json' file inside any Codehooks project directory. Ask the user for the path to their Codehooks project, then read the config.json file to get the 'project' and 'space' values.",
+        description: "Set the active Codehooks project and space for this session. MUST be called before using any other tools (except set_admin_token). The project and space values can be found in the 'config.json' file inside any Codehooks project directory. Ask the user for the path to their Codehooks project, then read the config.json file to get the 'name' (or 'project') and 'space' values.",
         schema: setProjectSchema,
         inputSchema: {
             type: "object",
