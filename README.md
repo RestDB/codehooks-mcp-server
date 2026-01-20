@@ -2,6 +2,29 @@
 
 An MCP (Model Context Protocol) server that provides AI agents with database operations, serverless code deployment, and file management capabilities on the Codehooks.io platform.
 
+## When to Use This MCP vs. CLI Directly
+
+| Environment | Has Terminal? | Recommended Approach |
+|-------------|---------------|---------------------|
+| Claude Code | Yes | Use `coho` CLI directly |
+| Cursor | Yes | Use `coho` CLI directly |
+| Claude Desktop | No | This MCP server |
+
+### For AI Agents with Terminal Access (Claude Code, Cursor, etc.)
+
+Using the Codehooks CLI directly is simpler and more flexible:
+
+1. Install the CLI: `npm install -g codehooks`
+2. Login: `coho login`
+3. Get the AI prompt: `coho prompt`
+4. Or reference the online docs: https://codehooks.io/llms.txt
+
+The agent can then run `coho` commands directly in the terminal.
+
+### For Claude Desktop (No Terminal Access)
+
+Use this MCP server to give the AI access to Codehooks functionality. See the [Setup](#setup) section below.
+
 ## Available functionality
 
 ### Database & Collections
