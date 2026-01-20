@@ -1,20 +1,13 @@
 #!/bin/bash
 set -e
 
-# Check if required environment variables are set
-if [ -z "$CODEHOOKS_PROJECT_NAME" ]; then
-    echo "Error: CODEHOOKS_PROJECT_NAME environment variable is required"
-    exit 1
-fi
+# No required environment variables!
+# - Admin token can be set via CODEHOOKS_ADMIN_TOKEN env var OR via set_admin_token tool
+# - Project and space are set via set_project tool (reads from config.json)
 
 if [ -z "$CODEHOOKS_ADMIN_TOKEN" ]; then
-    echo "Error: CODEHOOKS_ADMIN_TOKEN environment variable is required"
-    exit 1
-fi
-
-if [ -z "$CODEHOOKS_SPACE" ]; then
-    echo "Error: CODEHOOKS_SPACE environment variable is required"
-    exit 1
+    echo "Note: CODEHOOKS_ADMIN_TOKEN not set. Use set_admin_token tool to configure."
+    echo "To get a token, run 'coho add-admintoken' in your terminal."
 fi
 
 exec node build/index.js 

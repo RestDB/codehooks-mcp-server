@@ -29,9 +29,10 @@ interface CodehooksConfig {
     adminToken: string;
 }
 
+// Config is mutable - project/space can be set via set_project tool
 const config: CodehooksConfig = {
-    projectId: process.env.CODEHOOKS_PROJECT_NAME || "",
-    space: process.env.CODEHOOKS_SPACE || "dev",
+    projectId: "",  // Set via set_project tool
+    space: "",      // Set via set_project tool
     adminToken: process.env.CODEHOOKS_ADMIN_TOKEN || "",
 };
 
@@ -180,6 +181,15 @@ const collectionSchema = z.object({
     sys: z.boolean().optional().describe("Show system collections")
 });
 
+const setProjectSchema = z.object({
+    project: z.string().describe("The project name/ID (found in config.json 'project' field)"),
+    space: z.string().describe("The space name (found in config.json 'space' field, typically 'dev')")
+});
+
+const setAdminTokenSchema = z.object({
+    token: z.string().describe("The Codehooks admin token. Users can generate one by running 'coho add-admintoken' in their terminal.")
+});
+
 // Add type inference
 type QueryCollectionArgs = z.infer<typeof queryCollectionSchema>;
 type DeployCodeArgs = z.infer<typeof deployCodeSchema>;
@@ -202,9 +212,36 @@ type KvDelArgs = z.infer<typeof kvDelSchema>;
 type LogArgs = z.infer<typeof logSchema>;
 type DocsArgs = z.infer<typeof docsSchema>;
 type CollectionArgs = z.infer<typeof collectionSchema>;
+type SetProjectArgs = z.infer<typeof setProjectSchema>;
+type SetAdminTokenArgs = z.infer<typeof setAdminTokenSchema>;
 
 // Tool definitions with JSON Schema for tools/list
 const tools = [
+    {
+        name: "set_project",
+        description: "Set the active Codehooks project and space for this session. MUST be called before using any other tools (except set_admin_token). The project and space values can be found in the 'config.json' file inside any Codehooks project directory. Ask the user for the path to their Codehooks project, then read the config.json file to get the 'project' and 'space' values.",
+        schema: setProjectSchema,
+        inputSchema: {
+            type: "object",
+            properties: {
+                project: { type: "string", description: "The project name/ID from config.json 'project' field" },
+                space: { type: "string", description: "The space name from config.json 'space' field (typically 'dev')" }
+            },
+            required: ["project", "space"]
+        }
+    },
+    {
+        name: "set_admin_token",
+        description: "Set the Codehooks admin token for this session. Call this if the admin token is not configured. To get an admin token, the user should run 'coho add-admintoken' in their terminal (requires coho CLI to be installed and logged in via 'coho login').",
+        schema: setAdminTokenSchema,
+        inputSchema: {
+            type: "object",
+            properties: {
+                token: { type: "string", description: "The admin token from 'coho add-admintoken' command" }
+            },
+            required: ["token"]
+        }
+    },
     {
         name: "query_collection",
         description: "Query data from a collection. Supports URL-style, regex, and MongoDB-style JSON queries with comparison operators. Can also query system collections like '_hooks' which contains deployment metadata including available API endpoints. Using delete, update or replace is very powerful but also dangerous, so use with caution.",
@@ -579,14 +616,30 @@ server.setRequestHandler(ListToolsRequestSchema, async (request) => {
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
     console.error(`Received tools/call request for: ${request.params.name}`);
 
-    if (!config.projectId || config.projectId.trim() === '') {
-        console.error("CODEHOOKS_PROJECT_NAME is not set, so you need to supply the Agent with the project name");
-        throw new McpError(ErrorCode.InvalidRequest, "Missing required configuration: CODEHOOKS_PROJECT_NAME must be set.");
+    // set_admin_token can be called without token being set
+    const toolsWithoutToken = ['set_admin_token'];
+
+    if (!toolsWithoutToken.includes(request.params.name)) {
+        if (!config.adminToken || config.adminToken.trim() === '') {
+            throw new McpError(
+                ErrorCode.InvalidRequest,
+                "No admin token configured. Please use the 'set_admin_token' tool to provide your token. " +
+                "To get an admin token, the user should run 'coho add-admintoken' in their terminal " +
+                "(requires the Codehooks CLI to be installed and logged in via 'coho login')."
+            );
+        }
     }
 
-    if (!config.adminToken || config.adminToken.trim() === '') {
-        console.error("CODEHOOKS_ADMIN_TOKEN is not set, so you need to supply the Agent with the admin token");
-        throw new McpError(ErrorCode.InvalidRequest, "Missing required configuration: CODEHOOKS_ADMIN_TOKEN must be set and not empty.");
+    // set_project, set_admin_token and docs can be called without project being set
+    const toolsWithoutProject = ['set_project', 'set_admin_token', 'docs'];
+
+    if (!toolsWithoutProject.includes(request.params.name)) {
+        if (!config.projectId || config.projectId.trim() === '') {
+            throw new McpError(
+                ErrorCode.InvalidRequest,
+                "No project configured. Please use the 'set_project' tool first. To find the project and space values, read the 'config.json' file from your Codehooks project directory."
+            );
+        }
     }
 
     const tool = tools.find(t => t.name === request.params.name);
@@ -600,6 +653,45 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const args = tool.schema.parse(request.params.arguments);
 
         switch (tool.name) {
+            case "set_project": {
+                const { project, space } = args as SetProjectArgs;
+
+                // Update the config with provided values
+                config.projectId = project;
+                config.space = space;
+
+                console.error(`Project configured: project=${project}, space=${space}`);
+
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: `Project configured successfully!\n\nProject: ${project}\nSpace: ${space}\n\nYou can now use all other Codehooks tools.`
+                        }
+                    ],
+                    isError: false
+                };
+            }
+
+            case "set_admin_token": {
+                const { token } = args as SetAdminTokenArgs;
+
+                // Update the config with provided token
+                config.adminToken = token;
+
+                console.error(`Admin token configured (length: ${token.length})`);
+
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: `Admin token configured successfully!\n\nYou can now use set_project to configure your project, or use other Codehooks tools if project is already set.`
+                        }
+                    ],
+                    isError: false
+                };
+            }
+
             case "query_collection": {
                 const {
                     collection,
@@ -1441,10 +1533,14 @@ console.error("=== MCP Server Starting ===");
 // Load ChatGPT prompt from markdown file
 await loadChatGPTPrompt();
 
-console.error("Environment:");
-console.error(`- Project: ${config.projectId || 'Not set, you need to supply the Agent with the project name'}`);
-console.error(`- Space: ${config.space}`);
-console.error(`- Admin token present: ${!!config.adminToken}`);
+console.error("Configuration:");
+console.error(`- Admin token: ${config.adminToken ? 'Present (from env)' : 'Not set (use set_admin_token tool)'}`);
+console.error(`- Project: Not set (use set_project tool)`);
+console.error(`- Space: Not set (use set_project tool)`);
+console.error("\nSetup instructions for AI agents:");
+console.error("1. If admin token not set: Ask user to run 'coho add-admintoken', then use set_admin_token tool");
+console.error("2. Read 'config.json' from user's Codehooks project directory to get project and space values");
+console.error("3. Use set_project tool with those values");
 
 console.error("\nTesting coho CLI availability...");
 try {

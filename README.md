@@ -36,63 +36,97 @@ An MCP (Model Context Protocol) server that provides AI agents with database ope
 
 ## Setup
 
-### Get Codehooks Admin Token (keep it secret!)
+The MCP server supports flexible configuration - from zero-config (everything via conversation) to pre-configured environment variables.
+
+### Option 1: Zero Configuration (Recommended)
+
+The simplest setup - no environment variables needed. The AI agent will guide you through authentication.
+
+**Claude Desktop** (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "codehooks": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "ghcr.io/restdb/codehooks-mcp:latest"]
+    }
+  }
+}
+```
+
+**Cursor** (`~/.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "codehooks": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "ghcr.io/restdb/codehooks-mcp:latest"]
+    }
+  }
+}
+```
+
+When you start a conversation, the AI will:
+1. Ask for your admin token (you get this by running `coho add-admintoken` in your terminal)
+2. Ask for your project path and read the `config.json` to get project and space settings
+
+### Option 2: Pre-configured Admin Token
+
+Set your admin token once in the config, and only configure the project per-conversation.
+
+First, get your admin token:
 
 ```bash
 coho login
 coho add-admintoken
 ```
 
-### Create MCP Server Script
+Then add to your MCP config:
 
-Create a folder for your MCP server scripts:
-
-```bash
-mkdir ~/mcp-servers
-cd ~/mcp-servers
+```json
+{
+  "mcpServers": {
+    "codehooks": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "-e", "CODEHOOKS_ADMIN_TOKEN=your_token_here", "ghcr.io/restdb/codehooks-mcp:latest"]
+    }
+  }
+}
 ```
 
-**For macOS/Linux** - Create `codehooks.sh`:
+The AI will still use `set_project` to configure which project to work with based on your project's `config.json`.
+
+### Option 3: Shell Script (for multiple projects)
+
+Create a shell script for easier management.
+
+**macOS/Linux** - Create `~/mcp-servers/codehooks.sh`:
 
 ```bash
 #!/bin/bash
-
-# Set PATH to include common Docker locations
 export PATH="/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:$PATH"
 
 exec docker run --rm -i \
   --pull always \
-  -e CODEHOOKS_PROJECT_NAME=your_project_name \
   -e CODEHOOKS_ADMIN_TOKEN=your_admin_token \
-  -e CODEHOOKS_SPACE=your_space_name \
   ghcr.io/restdb/codehooks-mcp:latest
 ```
 
-Make it executable:
+Make it executable: `chmod +x ~/mcp-servers/codehooks.sh`
 
-```bash
-chmod +x ~/mcp-servers/codehooks.sh
-```
-
-**For Windows** - Create `codehooks.bat`:
+**Windows** - Create `codehooks.bat`:
 
 ```batch
 @echo off
 docker run --rm -i ^
   --pull always ^
-  -e CODEHOOKS_PROJECT_NAME=your_project_name ^
   -e CODEHOOKS_ADMIN_TOKEN=your_admin_token ^
-  -e CODEHOOKS_SPACE=your_space_name ^
   ghcr.io/restdb/codehooks-mcp:latest
 ```
 
-Replace `your_project_name`, `your_admin_token`, and `your_space_name` with your actual values.
-
-### Configure for Claude Desktop
-
-Add to your `claude_desktop_config.json`:
-
-**macOS/Linux:**
+Then reference the script in your MCP config:
 
 ```json
 {
@@ -104,47 +138,56 @@ Add to your `claude_desktop_config.json`:
 }
 ```
 
-**Windows:**
+### How Authentication Works
+
+The MCP server uses two setup tools that the AI agent calls automatically:
+
+| Tool | Purpose | Source |
+|------|---------|--------|
+| `set_admin_token` | Authenticate with Codehooks | User provides token from `coho add-admintoken` |
+| `set_project` | Select project and space | AI reads from your project's `config.json` |
+
+**Typical conversation flow:**
+
+```
+You: "Help me deploy a new API to my codehooks project at ~/myproject"
+
+AI: I'll help you with that. First, I need to configure the project.
+    [Reads ~/myproject/config.json]
+    [Calls set_project with project and space from config.json]
+
+    Now I can help you deploy. What would you like the API to do?
+```
+
+If the admin token isn't configured:
+
+```
+You: "Query my codehooks database"
+
+AI: I need an admin token first. Please run this in your terminal:
+
+    coho add-admintoken
+
+    Then paste the token here.
+
+You: "abc123-xyz789..."
+
+AI: [Calls set_admin_token]
+    Token configured! Now, which project would you like to work with?
+```
+
+### Project Configuration
+
+Every Codehooks project has a `config.json` file with this structure:
 
 ```json
 {
-  "mcpServers": {
-    "codehooks": {
-      "command": "C:\\Users\\username\\mcp-servers\\codehooks.bat"
-    }
-  }
+  "project": "myproject-abcd",
+  "space": "dev"
 }
 ```
 
-### Configure for Cursor
-
-Add to your `~/.cursor/mcp.json`:
-
-**macOS/Linux:**
-
-```json
-{
-  "mcpServers": {
-    "codehooks": {
-      "command": "/Users/username/mcp-servers/codehooks.sh"
-    }
-  }
-}
-```
-
-**Windows:**
-
-```json
-{
-  "mcpServers": {
-    "codehooks": {
-      "command": "C:\\Users\\username\\mcp-servers\\codehooks.bat"
-    }
-  }
-}
-```
-
-Replace `username` with your actual username.
+The AI agent reads this file to configure which project to work with. Just tell the AI where your project is located.
 
 ## Example Requests
 
