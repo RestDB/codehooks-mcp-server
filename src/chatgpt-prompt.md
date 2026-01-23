@@ -627,6 +627,46 @@ app.post('/start', async (req, res) => {
 export default app.init();
 ```
 
+**Real-time Pub/Sub:**
+
+Enable real-time communication between your backend and clients using Server-Sent Events (SSE).
+
+```javascript
+import { app, realtime } from 'codehooks-js';
+
+// Create a channel for real-time events
+realtime.createChannel('/notifications');
+
+// Create listener endpoint for clients to subscribe
+app.post('/subscribe', async (req, res) => {
+  const listener = await realtime.createListener('/notifications', req.body);
+  res.json({ listenerID: listener._id });
+});
+
+// Publish event to all listeners
+app.post('/notify', async (req, res) => {
+  await realtime.publishEvent('/notifications', req.body);
+  res.json({ sent: true });
+});
+
+// Publish event to filtered listeners (only those matching query)
+app.post('/notify-topic', async (req, res) => {
+  const { topic, message } = req.body;
+  await realtime.publishEvent('/notifications', { message }, { topic });
+  res.json({ sent: true });
+});
+
+// Remove a listener
+app.delete('/unsubscribe/:listenerID', async (req, res) => {
+  await realtime.removeListener('/notifications', req.params.listenerID);
+  res.json({ removed: true });
+});
+
+export default app.init();
+```
+
+For client-side SSE connection and complete examples, see: https://codehooks.io/docs/realtimeapi
+
 ## Codehooks CLI for AI Agents
 
 The Codehooks CLI (`coho`) is well-suited for AI agents working with command-line tools. It provides direct access to all platform features including deployment, database operations, and file management.
