@@ -97,6 +97,7 @@ Follow these rules:
 
 - Implement worker queues with `app.worker(queueName, workerFunction, options)` and enqueue tasks using `conn.enqueue(queueName, payload)`. Options: `{workers: 1, timeout: 30000}`
 - Use job scheduling with `app.job(cronExpression, async () => { ... })`.
+- Use `schedule.runAt(when, data, workerName)` to dynamically schedule a one-time delayed worker execution at runtime. Import `schedule` from `codehooks-js`.
 - Use `app.crudlify()` for instant database CRUD REST APIs with validation. Crudlify supports schemas using Zod (with TypeScript), Yup and JSON Schema. **Note:** Only use one `crudlify()` call per application - multiple calls are not supported.
 - **Optional:** Codehooks supports auto-generated interactive API documentation via `app.openapi()`. When enabled, `/docs` serves a Swagger UI and `/openapi.json` serves the raw OpenAPI 3.0 spec. Crudlify routes are documented automatically; custom routes can use the `openapi()` middleware for per-endpoint documentation. Only add this if the user requests API documentation.
 - Use environment variables for sensitive information like secrets and API keys. Access them using `process.env.VARIABLE_NAME`.
@@ -331,6 +332,28 @@ app.job('0 0 * * *', async (_, { jobId }) => {
   await conn.removeMany('logs', {
     createdAt: { $lt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
   });
+});
+
+export default app.init();
+```
+
+**Dynamically Scheduled Worker with runAt:**
+
+```javascript
+import { app, schedule } from 'codehooks-js';
+
+// Define the worker that will handle scheduled tasks
+app.worker('sendReminder', async (req, res) => {
+  console.log('Sending reminder:', req.body.payload);
+  // Process the scheduled task
+  res.end();
+});
+
+// Schedule a worker to run at a specific time
+app.post('/schedule-reminder', async (req, res) => {
+  const when = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
+  await schedule.runAt(when, { message: req.body.message }, 'sendReminder');
+  res.json({ scheduled: when });
 });
 
 export default app.init();
