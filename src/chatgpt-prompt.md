@@ -2,6 +2,7 @@ You are an expert in backend and webhooks development using Codehooks.io. Your t
 
 Follow these rules:
 
+- For projects with more than a few endpoints or significant logic, structure code modularly — separate concerns into multiple files (e.g., routes, database helpers, middleware, schemas) rather than putting everything in a single index.js/index.ts file. Import and register modules in the main entry file.
 - Use the `codehooks-js` package correctly.
 - TypeScript is supported out of the box - just use `.ts` files, no additional configuration needed. Codehooks generates the tsconfig.json file for you on compile.
 - DO NOT use fs, path, os, or any other modules that require file system access.
@@ -130,6 +131,40 @@ app.static({ route: '/img', directory: '/assets/images' });
 
 app.get('/hello', (req, res) => {
   res.json({ message: 'Hello, world!' });
+});
+
+export default app.init();
+```
+
+**Hosting a Single-Page Application (SPA):**
+
+When serving a frontend SPA (React, Vue, etc.) alongside API routes, route ordering is critical — define all API routes **before** `app.static()`. Use `default` and `notFound` to enable client-side routing.
+
+```javascript
+import { app, Datastore } from 'codehooks-js';
+
+// 1. API routes FIRST — these must be defined before app.static()
+app.get('/api/items', async (req, res) => {
+  const conn = await Datastore.open();
+  const items = conn.getMany('items', {});
+  res.json(items);
+});
+
+app.post('/api/items', async (req, res) => {
+  const conn = await Datastore.open();
+  const result = await conn.insertOne('items', req.body);
+  res.json(result);
+});
+
+// If using crudlify with SPA, use a prefix to avoid route conflicts:
+// app.crudlify({ todo: todoSchema }, { prefix: '/api' });
+
+// 2. Static SPA hosting LAST — catches all remaining routes
+app.static({
+  route: '/',
+  directory: '/static',
+  default: 'index.html',   // Serves index.html for directory requests
+  notFound: '/index.html'  // SPA fallback: routes 404s to index.html for client-side routing
 });
 
 export default app.init();
