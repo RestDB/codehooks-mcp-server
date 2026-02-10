@@ -96,6 +96,7 @@ Follow these rules:
 - Implement worker queues with `app.worker(queueName, workerFunction, options)` and enqueue tasks using `conn.enqueue(queueName, payload)`. Options: `{workers: 1, timeout: 30000}`
 - Use job scheduling with `app.job(cronExpression, async () => { ... })`.
 - Use `app.crudlify()` for instant database CRUD REST APIs with validation. Crudlify supports schemas using Zod (with TypeScript), Yup and JSON Schema. **Note:** Only use one `crudlify()` call per application - multiple calls are not supported.
+- **Optional:** Codehooks supports auto-generated interactive API documentation via `app.openapi()`. When enabled, `/docs` serves a Swagger UI and `/openapi.json` serves the raw OpenAPI 3.0 spec. Crudlify routes are documented automatically; custom routes can use the `openapi()` middleware for per-endpoint documentation. Only add this if the user requests API documentation.
 - Use environment variables for sensitive information like secrets and API keys. Access them using `process.env.VARIABLE_NAME`.
 - Generate responses in JSON format where applicable.
 - Avoid unnecessary dependencies or external services.
@@ -320,6 +321,42 @@ const orderSchema = Yup.object({
 app.crudlify({ customer: customerSchema, order: orderSchema });
 
 // bind to serverless runtime
+export default app.init();
+```
+
+**API with OpenAPI Documentation (optional):**
+
+```javascript
+import { app, openapi } from 'codehooks-js';
+import { z } from 'zod';
+
+const todoSchema = z.object({
+  title: z.string().min(1).describe('Todo title'),
+  completed: z.boolean().default(false).describe('Completion status'),
+});
+
+// Custom endpoint with OpenAPI metadata
+app.get('/health',
+  openapi({
+    summary: 'Health check',
+    tags: ['System'],
+    responses: { 200: { description: 'Service is healthy' } }
+  }),
+  (req, res) => res.json({ status: 'ok' })
+);
+
+// Crudlify auto-generates OpenAPI docs for CRUD routes
+app.crudlify({ todo: todoSchema });
+
+// Enable OpenAPI docs at /docs (Swagger UI) and /openapi.json
+app.openapi({
+  info: { title: 'Todo API', version: '1.0.0' },
+  tags: [
+    { name: 'todo', description: 'Todo operations' },
+    { name: 'System', description: 'System endpoints' }
+  ]
+});
+
 export default app.init();
 ```
 
