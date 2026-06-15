@@ -96,6 +96,7 @@ Follow these rules:
   **Important:** `res.json()`, `res.send()`, and `res.end()` terminate execution immediately. Any code after these calls will not run.
 
 - Implement worker queues with `app.worker(queueName, workerFunction, options)` and enqueue tasks using `conn.enqueue(queueName, payload)`. Options: `{workers: 1, timeout: 30000}`
+- Bulk-enqueue jobs from a database query with `conn.enqueueFromQuery(collection, query, topic, options)`. Each object matching the query is enqueued as a separate job for the `topic` worker. Returns `{JobId, count}`. The optional `options` object supports `useIndex`, `startIndex`, `endIndex`, `limit`, `offset`, and `reverse` for large datasets.
 - Use job scheduling with `app.job(cronExpression, async () => { ... })`.
 - Use `schedule.runAt(when, data, workerName)` to dynamically schedule a one-time delayed worker execution at runtime. Import `schedule` from `codehooks-js`.
 - Use `app.crudlify()` for instant database CRUD REST APIs with validation. Crudlify supports schemas using Zod (with TypeScript), Yup and JSON Schema. **Note:** Only use one `crudlify()` call per application - multiple calls are not supported.
@@ -314,6 +315,17 @@ app.post('/send-email', async (req, res) => {
   const conn = await Datastore.open();
   await conn.enqueue('sendEmail', req.body);
   res.json({ message: 'Email request received' });
+});
+
+// Bulk-enqueue a job per record matching a query
+app.post('/send-newsletter', async (req, res) => {
+  const conn = await Datastore.open();
+  const { JobId, count } = await conn.enqueueFromQuery(
+    'users', // collection
+    { emailConsent: true }, // query
+    'sendEmail' // worker topic
+  );
+  res.json({ message: `Queued ${count} emails`, JobId });
 });
 
 export default app.init();
