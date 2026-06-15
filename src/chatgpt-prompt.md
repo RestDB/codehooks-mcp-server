@@ -97,7 +97,7 @@ Follow these rules:
 
 - Implement worker queues with `app.worker(queueName, workerFunction, options)` and enqueue tasks using `conn.enqueue(queueName, payload)`. Options: `{workers: 1, timeout: 30000}`
 - Bulk-enqueue jobs from a database query with `conn.enqueueFromQuery(collection, query, topic, options)`. Each object matching the query is enqueued as a separate job for the `topic` worker. Returns `{JobId, count}`. The optional `options` object supports `useIndex`, `startIndex`, `endIndex`, `limit`, `offset`, and `reverse` for large datasets.
-- Use job scheduling with `app.job(cronExpression, async () => { ... })`.
+- Use job scheduling with `app.job(cronExpression, async (req, res) => { ...; res.end(); })`. The handler takes `(req, res)` like a route/worker and must call `res.end()` to signal completion.
 - Use `schedule.runAt(when, data, workerName)` to dynamically schedule a one-time delayed worker execution at runtime. Import `schedule` from `codehooks-js`.
 - Use `app.crudlify()` for instant database CRUD REST APIs with validation. Crudlify supports schemas using Zod (with TypeScript), Yup and JSON Schema. **Note:** Only use one `crudlify()` call per application - multiple calls are not supported.
 - **Optional:** Codehooks supports auto-generated interactive API documentation via `app.openapi()`. When enabled, `/docs` serves a Swagger UI and `/openapi.json` serves the raw OpenAPI 3.0 spec. Crudlify routes are documented automatically; custom routes can use the `openapi()` middleware for per-endpoint documentation. Only add this if the user requests API documentation.
@@ -337,13 +337,14 @@ export default app.init();
 import { app, Datastore } from 'codehooks-js';
 
 // Run daily at midnight
-app.job('0 0 * * *', async (_, { jobId }) => {
-  console.log(`Running scheduled job: ${jobId}`);
+app.job('0 0 * * *', async (req, res) => {
+  console.log('Running scheduled cleanup job');
   const conn = await Datastore.open();
   // Example: Clean up old records
   await conn.removeMany('logs', {
     createdAt: { $lt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
   });
+  res.end();
 });
 
 export default app.init();
