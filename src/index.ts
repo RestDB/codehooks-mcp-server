@@ -47,6 +47,51 @@ async function loadChatGPTPrompt(): Promise<void> {
     }
 }
 
+/**
+ * Validates a caller-supplied relative path for a staged deployment file.
+ * Rejects absolute paths, `..` traversal, drive letters and NUL bytes so that a
+ * deploy_code payload cannot write outside its temporary staging directory.
+ * Returns an error string, or null when the path is safe.
+ */
+function validateStagedPath(filePath: string): string | null {
+    if (typeof filePath !== 'string' || filePath.trim() === '') {
+        return 'path must be a non-empty string';
+    }
+    if (filePath.includes('\0')) {
+        return 'path must not contain NUL bytes';
+    }
+    // Treat backslashes as separators so Windows-style traversal is caught too
+    const normalized = filePath.replace(/\\/g, '/');
+    if (normalized.startsWith('/') || /^[a-zA-Z]:/.test(normalized)) {
+        return 'path must be relative, not absolute';
+    }
+    if (normalized.split('/').some(segment => segment === '..')) {
+        return 'path must not contain ".." segments';
+    }
+    return null;
+}
+
+/**
+ * Resolves a staged file path inside baseDir and asserts it stays contained.
+ * Second line of defence behind validateStagedPath().
+ */
+function resolveStagedPath(baseDir: string, filePath: string): string {
+    const validationError = validateStagedPath(filePath);
+    if (validationError) {
+        throw new McpError(ErrorCode.InvalidParams, `Invalid file path "${filePath}": ${validationError}`);
+    }
+
+    const resolvedBase = path.resolve(baseDir);
+    const resolved = path.resolve(resolvedBase, filePath);
+    if (resolved !== resolvedBase && !resolved.startsWith(resolvedBase + path.sep)) {
+        throw new McpError(
+            ErrorCode.InvalidParams,
+            `Invalid file path "${filePath}": resolves outside the deployment directory`
+        );
+    }
+    return resolved;
+}
+
 // Tool schemas with proper typing
 const queryCollectionSchema = z.object({
     collection: z.string(),
@@ -70,7 +115,10 @@ const queryCollectionSchema = z.object({
 
 const deployCodeSchema = z.object({
     files: z.array(z.object({
-        path: z.string(),
+        path: z.string().refine(
+            value => validateStagedPath(value) === null,
+            value => ({ message: `Invalid file path "${value}": ${validateStagedPath(value)}` })
+        ).describe("Relative path within the deployment, e.g. 'index.js' or 'lib/util.js'. Absolute paths and '..' segments are rejected."),
         content: z.string()
     })),
     main: z.string().optional(),
@@ -718,7 +766,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 try {
                     // Write all files to the temporary directory with proper formatting
                     for (const file of filesToDeploy) {
-                        const filePath = path.join(tmpDir, file.path);
+                        // Confine every staged file to tmpDir (defence in depth behind
+                        // the schema-level check) to prevent path traversal writes
+                        const filePath = resolveStagedPath(tmpDir, file.path);
                         // Ensure directory exists
                         await fs.mkdir(path.dirname(filePath), { recursive: true });
                         console.error(`Writing file: ${filePath}`);
@@ -788,7 +838,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                         console.error('File contents before deployment:');
                         for (const file of filesToDeploy) {
                             console.error(`\n=== ${file.path} ===`);
-                            const content = await fs.readFile(path.join(tmpDir, file.path), 'utf8');
+                            const content = await fs.readFile(resolveStagedPath(tmpDir, file.path), 'utf8');
                             console.error(content);
                         }
 
