@@ -814,7 +814,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                     // Install dependencies
                     try {
                         console.error('Installing dependencies...');
-                        const { stdout: npmStdout, stderr: npmStderr } = await execFile('npm', ['install'], { cwd: tmpDir });
+                        // --ignore-scripts: the staged package.json is caller-supplied, so
+                        // running lifecycle scripts here would execute arbitrary code on the host
+                        const { stdout: npmStdout, stderr: npmStderr } = await execFile('npm', ['install', '--ignore-scripts'], { cwd: tmpDir });
                         if (npmStderr) console.error('npm install stderr:', npmStderr);
                         console.error('npm install stdout:', npmStdout);
 

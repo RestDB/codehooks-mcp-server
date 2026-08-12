@@ -107,7 +107,7 @@ The `deploy_code` handler temporarily changes the process working directory to t
 The `query_collection` tool detects CSV/JSONL output flags and returns raw output instead of attempting JSON parsing (src/index.ts:652-663).
 
 ### npm Install in Deployment
-The deployment process runs `npm install` in the temporary directory before deploying to ensure all dependencies (especially `codehooks-js`) are present (src/index.ts:766-779).
+The deployment process runs `npm install --ignore-scripts` in the temporary directory before deploying to ensure all dependencies (especially `codehooks-js`) are present. `--ignore-scripts` is required for safety, not preference: the staged `package.json` is caller-supplied, so running lifecycle scripts would execute arbitrary code on the host. Do not remove it.
 
 ## MCP Protocol Implementation
 
