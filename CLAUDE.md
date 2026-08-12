@@ -114,8 +114,8 @@ The deployment process runs `npm install` in the temporary directory before depl
 The server implements the MCP SDK from `@modelcontextprotocol/sdk`:
 - Uses `StdioServerTransport` for standard input/output communication
 - Registers handlers for `ListToolsRequestSchema` and `CallToolRequestSchema`
-- Includes a placeholder `CompleteRequestSchema` handler
-- Server metadata: name "codehooks-mcp", version "1.0.0"
+- Server metadata: name "codehooks-mcp", version matching `package.json`
+- Only handlers whose capability is advertised may be registered; the SDK throws at startup otherwise
 - Advertises `tools` capability with `listChanged: true`
 
 ## Docker Considerations

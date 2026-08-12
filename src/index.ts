@@ -7,7 +7,6 @@ import {
     CallToolRequestSchema,
     ErrorCode,
     McpError,
-    CompleteRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { promisify } from "util";
@@ -562,7 +561,7 @@ const tools = [
 const server = new Server(
     {
         name: "codehooks-mcp",
-        version: "1.0.0",
+        version: "0.3.1",
     },
     {
         capabilities: {
@@ -1472,19 +1471,6 @@ For comprehensive LLM-optimized documentation:
 });
 
 // Add completion handler
-server.setRequestHandler(CompleteRequestSchema, async (request) => {
-    console.error("Received completion request");
-    return {
-        completion: {
-            choices: [
-                {
-                    text: "Example completion",
-                },
-            ],
-        },
-    };
-});
-
 // Start the server
 console.error("=== MCP Server Starting ===");
 
