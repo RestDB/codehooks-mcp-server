@@ -147,7 +147,7 @@ app.get('/hello', (req, res) => {
 export default app.init();
 ```
 
-Static routes declared **without** a callback are served straight from the API gateway, without starting your code — faster and cheaper. Use the `headers` option rather than a callback to set cache headers, since a callback opts the route out of that fast path. Gateway-served responses carry an `x-codehooks-static: hit` header. Only paths that resolve to a real file are served that way; everything else (API routes, `app.realtime()` endpoints, the SPA fallback) runs your code as usual.
+Static routes declared **without** a callback are served without starting your serverless runtime, which is faster. Use the `headers` option rather than a callback to set cache headers, since a callback opts the route out of that fast path. Responses served this way carry an `x-codehooks-static: hit` header. Only paths that resolve to a real file qualify; everything else (API routes, `app.realtime()` endpoints, the SPA fallback) runs your functions as usual.
 
 **Hosting a Single-Page Application (SPA):**
 
