@@ -132,6 +132,14 @@ import { app } from 'codehooks-js';
 // Serve static files from deployed source directory
 app.static({ route: '/img', directory: '/assets/images' });
 
+// Set the cache policy with `headers` (a value of null removes a header).
+// Static files are served WITHOUT the platform's default no-store headers.
+app.static({
+  route: '/assets',
+  directory: '/dist/assets',
+  headers: { 'Cache-Control': 'public, max-age=31536000, immutable' },
+});
+
 app.get('/hello', (req, res) => {
   res.json({ message: 'Hello, world!' });
 });
@@ -139,9 +147,11 @@ app.get('/hello', (req, res) => {
 export default app.init();
 ```
 
+Static routes declared **without** a callback are served without starting your serverless runtime, which is faster. Use the `headers` option rather than a callback to set cache headers, since a callback opts the route out of that fast path. Responses served this way carry an `x-codehooks-static: hit` header. Only paths that resolve to a real file qualify; everything else (API routes, `app.realtime()` endpoints, the SPA fallback) runs your functions as usual.
+
 **Hosting a Single-Page Application (SPA):**
 
-When serving a frontend SPA (React, Vue, etc.) alongside API routes, route ordering is critical — define all API routes **before** `app.static()`. Use `default` and `notFound` to enable client-side routing.
+When serving a frontend SPA (React, Vue, etc.) alongside API routes, route ordering is critical — define all API routes **before** `app.static()`. Use `default` and `notFound` to enable client-side routing. `headers` applies to every file a route serves, so give the hashed build output its own route ahead of the catch-all — dispatch is first match wins.
 
 ```javascript
 import { app, Datastore } from 'codehooks-js';
@@ -162,7 +172,16 @@ app.post('/api/items', async (req, res) => {
 // If using crudlify with SPA, use a prefix to avoid route conflicts:
 // app.crudlify({ todo: todoSchema }, { prefix: '/api' });
 
-// 2. Static SPA hosting LAST — catches all remaining routes
+// 2. Hashed build output — content hash in the filename, cache forever
+app.static({
+  route: '/assets',
+  directory: '/static/assets',
+  headers: { 'Cache-Control': 'public, max-age=31536000, immutable' }
+});
+
+// 3. Static SPA hosting LAST — catches all remaining routes.
+// The shell (default/notFound) defaults to Cache-Control: no-cache, so it can
+// never be cached pointing at hashed files that no longer exist.
 app.static({
   route: '/',
   directory: '/static',
