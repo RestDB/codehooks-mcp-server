@@ -65,6 +65,18 @@ Follow these rules:
   - `conn.getAll(keypattern, options)` // options: `{keyspace: 'namespace'}`
   - `conn.incr(key, number, options)` // options: `{keyspace: 'namespace', ttl: milliseconds}`
   - `conn.decr(key, number, options)` // options: `{keyspace: 'namespace', ttl: milliseconds}`
+
+- **`incr`/`decr` are atomic and return the NEW value as a number** — use the
+  return value instead of a `get`-then-`set`, which races. Note two things that
+  are easy to get wrong:
+  - `get()` returns the value as a **string**, while `incr()` returns a
+    **number**. Don't assume the types match.
+  - **`ttl` is refreshed on every `incr`.** The key expires after that long
+    *untouched*, not that long after it was created. So `incr` fits a counter
+    whose key already carries the period (`visits:2026-10-29`), but **not** a
+    fixed window that must reopen — under steady traffic the key is touched
+    continuously and never expires. For a "once per minute" gate, `set` the
+    flag once and let it lapse.
   - `conn.del(key, options)` // options: `{keyspace: 'namespace'}`
   - `conn.delAll(keypattern,options)` // options: `{keyspace: 'namespace'}`
 
@@ -72,10 +84,16 @@ Follow these rules:
 
 - **Webhook Support:** Use `req.rawBody` to access the raw, unparsed request body. This is essential for webhook signature verification where the exact byte sequence matters (HMAC validation). Using `req.body` or `JSON.stringify(req.body)` will fail because JSON parsing may reorder keys or change whitespace.
 
+  **Known limitation (29.10.2026): `rawBody` is only set for `Content-Type:
+  application/json`** — `undefined` otherwise, including
+  `application/x-www-form-urlencoded`, which *is* parsed into `req.body`. A
+  content type the runtime does not parse arrives as an empty object, not an
+  error. Remove this note once `rawBody` is populated for all content types.
+
 - **Request Object Properties:**
 
   - `req.body` - Parsed JSON request body
-  - `req.rawBody` - Raw unparsed request body (use for webhook signature verification)
+  - `req.rawBody` - Raw unparsed request body (use for webhook signature verification). Only set when `Content-Type` is `application/json`; `undefined` otherwise.
   - `req.query` - Query string parameters (e.g., `/items?status=active` → `req.query.status`)
   - `req.params` - URL path parameters (e.g., `/items/:id` → `req.params.id`)
   - `req.headers` - Request headers object
