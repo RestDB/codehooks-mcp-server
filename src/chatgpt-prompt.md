@@ -60,7 +60,16 @@ Follow these rules:
 
   - `conn.createIndex(collection, indexes)` // `'field'` or `['a', 'b']` = separate single-field indexes; a nested array `[['tenant', 'status']]` = ONE compound index
   - `conn.removeIndex(collection, indexes)` // a compound index is removed by its name, e.g. `'tenant+status'`
-  - Prefer creating indexes ONCE with the CLI (`coho createindex --collection orders --index status`, compound: `--index 'tenant+status'`) or the `create_index` MCP tool. Do NOT call `createIndex` in route handlers or workers: calling it on an already indexed field re-reads the whole collection to rebuild the index.
+  - Create indexes ONCE, in the startup function passed to `app.init()`, which runs once on every deploy. Do NOT call `createIndex` in route handlers, workers or jobs: calling it on an already indexed field re-reads the whole collection to rebuild the index.
+
+    ```javascript
+    export default app.init(async () => {
+      const conn = await Datastore.open();
+      await conn.createIndex('orders', [['tenant', 'status'], 'createdAt']);
+    });
+    ```
+
+  - For very large collections, create the index once with the CLI instead (`coho createindex --collection orders --index status`, compound: `--index 'tenant+status'`) or the `create_index` MCP tool, since `app.init()` rebuilds it on every deploy.
   - `createIndex` resolves when the build has started, not when it's finished. On a collection with data, queries on that field can return incomplete results until the build is done.
   - Indexes are used for equality, `$gt`/`$gte`/`$lt`/`$lte`, `$in`, and `$or` when every branch can use an index. `$ne`, `$nin`, `$exists`, `$not` and `$regex` always scan the whole collection.
   - A query uses ONE index and filters the remaining conditions. A compound index is used only when the query has a plain equality on EVERY field in it (e.g. `{ tenant: 'acme', status: 'open' }`).
