@@ -56,6 +56,17 @@ Follow these rules:
 
   Example: `{ $set: { status: 'active' }, $inc: { views: 1 } }`
 
+- **Indexes** (speed up queries and sorts on large collections):
+
+  - `conn.createIndex(collection, indexes)` // `'field'` or `['a', 'b']` = separate single-field indexes; a nested array `[['tenant', 'status']]` = ONE compound index
+  - `conn.removeIndex(collection, indexes)` // a compound index is removed by its name, e.g. `'tenant+status'`
+  - Prefer creating indexes ONCE with the CLI (`coho createindex --collection orders --index status`, compound: `--index 'tenant+status'`) or the `create_index` MCP tool. Do NOT call `createIndex` in route handlers or workers: calling it on an already indexed field re-reads the whole collection to rebuild the index.
+  - `createIndex` resolves when the build has started, not when it's finished. On a collection with data, queries on that field can return incomplete results until the build is done.
+  - Indexes are used for equality, `$gt`/`$gte`/`$lt`/`$lte`, `$in`, and `$or` when every branch can use an index. `$ne`, `$nin`, `$exists`, `$not` and `$regex` always scan the whole collection.
+  - A query uses ONE index and filters the remaining conditions. A compound index is used only when the query has a plain equality on EVERY field in it (e.g. `{ tenant: 'acme', status: 'open' }`).
+  - A `sort` with an empty query reads in order from an index on the sort field. Index fields you filter or sort on often.
+  - Docs: https://codehooks.io/docs/indexapi
+
 - Utilize the key-value store with:
 
   - `conn.set(key, value, options)` // options: `{ttl: milliseconds, keyspace: 'namespace'}`

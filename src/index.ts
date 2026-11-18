@@ -144,12 +144,12 @@ const fileListSchema = z.object({
 
 const createIndexSchema = z.object({
     collection: z.string().describe("Collection name"),
-    index: z.string().describe("Field(s) to add to query index"),
+    index: z.string().describe("Field to index. Use 'fieldA+fieldB' to create a compound (multi-field) index"),
 });
 
 const dropIndexSchema = z.object({
     collection: z.string().describe("Collection name"),
-    index: z.string().describe("Field(s) to remove from query index"),
+    index: z.string().describe("Field to remove from query index. For a compound index, use its name, e.g. 'tenant+status'"),
 });
 
 const createCollectionSchema = z.object({
@@ -354,7 +354,7 @@ const tools = [
             type: "object",
             properties: {
                 collection: { type: "string", description: "Collection name" },
-                index: { type: "string", description: "Field(s) to add to query index" }
+                index: { type: "string", description: "Field to index. Use 'fieldA+fieldB' to create a compound (multi-field) index" }
             },
             required: ["collection", "index"]
         }
@@ -367,7 +367,7 @@ const tools = [
             type: "object",
             properties: {
                 collection: { type: "string", description: "Collection name" },
-                index: { type: "string", description: "Field(s) to remove from query index" }
+                index: { type: "string", description: "Field to remove from query index. For a compound index, use its name, e.g. 'tenant+status'" }
             },
             required: ["collection", "index"]
         }
